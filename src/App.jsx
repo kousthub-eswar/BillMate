@@ -3,9 +3,10 @@ import {
   LayoutDashboard, ShoppingCart, Package,
   Clock, Settings, Wallet, Users
 } from 'lucide-react';
-import { isAuthenticated } from './backend/auth';
 import { initializeSettings } from './database';
+import { isAuthenticated } from './backend/auth';
 import { ToastProvider } from './components/Toast';
+import OnboardingWizard from './components/OnboardingWizard';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BillingPage from './pages/BillingPage';
@@ -16,23 +17,27 @@ import CustomersPage from './pages/CustomersPage';
 import SettingsPage from './pages/SettingsPage';
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [activePage, setActivePage] = useState('billing');
-  const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Apply saved theme on app mount & initialize settings if already logged in
   useEffect(() => {
-    const init = async () => {
-      if (isAuthenticated()) {
-        await initializeSettings();
-        setLoggedIn(true);
-      }
-      setLoading(false);
-    };
-    init();
+    const savedTheme = localStorage.getItem('billmate_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    if (isAuthenticated()) {
+      initializeSettings();
+    }
   }, []);
 
   const handleLogin = async () => {
+    await initializeSettings();
     setLoggedIn(true);
+    // Check if onboarding is needed
+    if (!localStorage.getItem('billmate_onboarding_done')) {
+      setShowOnboarding(true);
+    }
   };
 
   const handleLogout = () => {
@@ -40,30 +45,6 @@ function App() {
     setActivePage('billing');
   };
 
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-primary)'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            border: '3px solid var(--border-color)',
-            borderTopColor: 'var(--primary-500)',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-            margin: '0 auto 16px'
-          }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
-    );
-  }
 
   if (!loggedIn) {
     return (
@@ -95,6 +76,15 @@ function App() {
       default: return <BillingPage />;
     }
   };
+
+  // Show onboarding for first-time users
+  if (showOnboarding) {
+    return (
+      <ToastProvider>
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>

@@ -76,6 +76,39 @@
   --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* ======================== */
+/* Light Theme Override      */
+/* ======================== */
+
+[data-theme="light"] {
+  /* Surface colors - Clean Light */
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f0f2;
+  --bg-elevated: #eaeaee;
+  --bg-input: #f0f0f3;
+  --bg-surface: #f8f8fa;
+
+  /* Text */
+  --text-primary: #1a1a1e;
+  --text-secondary: #52525b;
+  --text-muted: #8a8a96;
+  --text-inverse: #ffffff;
+
+  /* Borders */
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-focus: rgba(245, 166, 35, 0.5);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 24px rgba(245, 166, 35, 0.1);
+  --shadow-glow-strong: 0 4px 24px rgba(245, 166, 35, 0.18);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -97,6 +130,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
@@ -1942,4 +1976,56 @@ select.form-input {
   .expense-type-grid {
     grid-template-columns: repeat(5, 1fr);
   }
+}
+
+/* ======================== */
+/* Light Theme Specifics     */
+/* ======================== */
+
+[data-theme="light"] .bottom-nav {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .card-glass {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .modal-content {
+  background: var(--bg-secondary);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .date-range input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+[data-theme="light"] .nav-item.billing-nav {
+  box-shadow: 0 4px 18px rgba(245, 166, 35, 0.3);
+}
+
+[data-theme="light"] .cart-total-bar {
+  box-shadow: 0 4px 18px rgba(245, 166, 35, 0.25);
+}
+
+[data-theme="light"] .toast {
+  background: #ffffff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .login-container {
+  background: radial-gradient(ellipse at top, rgba(245, 166, 35, 0.06) 0%, var(--bg-primary) 60%);
+}
+
+/* Theme toggle button animation */
+.theme-toggle-icon {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.theme-toggle-icon:hover {
+  transform: rotate(30deg);
 }

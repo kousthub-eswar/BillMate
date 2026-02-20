@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Store, DollarSign, AlertTriangle, MessageSquare,
-    Download, Upload, LogOut, ChevronRight, FileText, Smartphone
+    Download, Upload, LogOut, ChevronRight, FileText, Smartphone,
+    Sun, Moon
 } from 'lucide-react';
 import { getAllSettings, setSetting } from '../database';
 import { exportAllData, importAllData, logout } from '../backend';
@@ -15,6 +16,9 @@ export default function SettingsPage({ onLogout }) {
     const showToast = useToast();
     const [installPrompt, setInstallPrompt] = useState(null);
     const [isInstalled, setIsInstalled] = useState(false);
+    const [theme, setTheme] = useState(() => {
+        return localStorage.getItem('billmate_theme') || 'dark';
+    });
 
     useEffect(() => {
         // Check if already installed
@@ -30,6 +34,16 @@ export default function SettingsPage({ onLogout }) {
         window.addEventListener('beforeinstallprompt', handler);
         return () => window.removeEventListener('beforeinstallprompt', handler);
     }, []);
+
+    // Apply theme on mount and whenever it changes
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('billmate_theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    };
 
     const loadSettings = async () => {
         const s = await getAllSettings();
@@ -121,6 +135,77 @@ export default function SettingsPage({ onLogout }) {
         <div className="page-content">
             <div className="page-header">
                 <h1>Settings</h1>
+            </div>
+
+            {/* Appearance */}
+            <div className="settings-group">
+                <div className="settings-group-title">Appearance</div>
+
+                <div className="settings-item" onClick={toggleTheme} id="theme-toggle">
+                    <div className="settings-item-icon" style={{ background: theme === 'dark' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 166, 35, 0.15)', color: theme === 'dark' ? 'var(--info-400)' : 'var(--primary-400)' }}>
+                        <span className="theme-toggle-icon" style={{ display: 'flex' }}>
+                            {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
+                        </span>
+                    </div>
+                    <div className="settings-item-info">
+                        <div className="settings-item-label">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</div>
+                        <div className="settings-item-desc">Tap to switch to {theme === 'dark' ? 'light' : 'dark'} mode</div>
+                    </div>
+                    {/* Custom theme pill toggle */}
+                    <div style={{
+                        marginLeft: 'auto',
+                        width: '60px',
+                        height: '32px',
+                        borderRadius: '16px',
+                        background: theme === 'dark'
+                            ? 'linear-gradient(135deg, #1e293b, #334155)'
+                            : 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                        border: theme === 'dark'
+                            ? '1.5px solid rgba(56, 189, 248, 0.3)'
+                            : '1.5px solid rgba(245, 166, 35, 0.3)',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: theme === 'dark'
+                            ? 'inset 0 1px 3px rgba(0,0,0,0.3)'
+                            : 'inset 0 1px 3px rgba(0,0,0,0.08)',
+                        overflow: 'hidden',
+                    }}>
+                        {/* Stars in dark mode background */}
+                        {theme === 'dark' && (
+                            <>
+                                <div style={{ position: 'absolute', top: '6px', left: '10px', width: '2px', height: '2px', borderRadius: '50%', background: 'rgba(255,255,255,0.6)' }} />
+                                <div style={{ position: 'absolute', top: '14px', left: '16px', width: '1.5px', height: '1.5px', borderRadius: '50%', background: 'rgba(255,255,255,0.4)' }} />
+                                <div style={{ position: 'absolute', top: '8px', left: '22px', width: '2px', height: '2px', borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }} />
+                            </>
+                        )}
+                        {/* Sliding knob */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '3px',
+                            left: theme === 'dark' ? '31px' : '3px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: theme === 'dark'
+                                ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)'
+                                : 'linear-gradient(135deg, #f59e0b, #f5a623)',
+                            boxShadow: theme === 'dark'
+                                ? '0 2px 8px rgba(56, 189, 248, 0.4)'
+                                : '0 2px 8px rgba(245, 166, 35, 0.4)',
+                            transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}>
+                            {theme === 'dark'
+                                ? <Moon size={13} color="white" strokeWidth={2.5} />
+                                : <Sun size={13} color="white" strokeWidth={2.5} />
+                            }
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Shop Settings */}

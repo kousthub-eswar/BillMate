@@ -45,8 +45,8 @@ export default function LoginPage({ onLogin }) {
     return (
         <div className="login-container">
             <div className="login-logo">
-                <div className="logo-icon">
-                    <Receipt size={32} color="white" />
+                <div className="logo-icon" style={{ padding: 0, overflow: 'hidden' }}>
+                    <img src="/icons/icon-192.svg" alt="BillMate" width={72} height={72} style={{ borderRadius: '24px' }} />
                 </div>
                 <h1>BillMate</h1>
                 <p>Simple billing for smart vendors</p>
