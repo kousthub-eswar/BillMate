@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Store, DollarSign, AlertTriangle, MessageSquare,
-    Download, Upload, LogOut, ChevronRight, FileText
+    Download, Upload, LogOut, ChevronRight, FileText, Smartphone
 } from 'lucide-react';
 import { getAllSettings, setSetting } from '../database';
 import { exportAllData, importAllData, logout } from '../backend';
@@ -13,6 +13,23 @@ export default function SettingsPage({ onLogout }) {
     const [editValue, setEditValue] = useState('');
     const fileInputRef = useRef(null);
     const showToast = useToast();
+    const [installPrompt, setInstallPrompt] = useState(null);
+    const [isInstalled, setIsInstalled] = useState(false);
+
+    useEffect(() => {
+        // Check if already installed
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            setIsInstalled(true);
+        }
+
+        // Capture install prompt
+        const handler = (e) => {
+            e.preventDefault();
+            setInstallPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handler);
+        return () => window.removeEventListener('beforeinstallprompt', handler);
+    }, []);
 
     const loadSettings = async () => {
         const s = await getAllSettings();
@@ -188,6 +205,55 @@ export default function SettingsPage({ onLogout }) {
                         <div className="settings-item-desc">Sign out of your account</div>
                     </div>
                 </div>
+            </div>
+
+            {/* Install App */}
+            {!isInstalled && (
+                <div className="settings-group">
+                    <div className="settings-group-title">App</div>
+                    <div
+                        className="settings-item"
+                        onClick={async () => {
+                            if (installPrompt) {
+                                installPrompt.prompt();
+                                const result = await installPrompt.userChoice;
+                                if (result.outcome === 'accepted') {
+                                    showToast('BillMate installed! 🎉');
+                                    setIsInstalled(true);
+                                }
+                                setInstallPrompt(null);
+                            } else {
+                                showToast('Open in Chrome and use "Add to Home Screen"', 'info');
+                            }
+                        }}
+                        style={{ borderColor: 'rgba(245, 166, 35, 0.2)' }}
+                    >
+                        <div className="settings-item-icon" style={{ background: 'rgba(245, 166, 35, 0.15)', color: 'var(--primary-400)' }}>
+                            <Smartphone size={18} />
+                        </div>
+                        <div className="settings-item-info">
+                            <div className="settings-item-label" style={{ color: 'var(--primary-400)' }}>Install App</div>
+                            <div className="settings-item-desc">Add BillMate to your home screen</div>
+                        </div>
+                        <ChevronRight size={18} color="var(--text-muted)" />
+                    </div>
+                </div>
+            )}
+
+            {/* App Info */}
+            <div style={{
+                textAlign: 'center',
+                padding: '20px 0 8px',
+                color: 'var(--text-muted)',
+                fontSize: '0.75rem'
+            }}>
+                <div style={{ fontWeight: 700, color: 'var(--primary-400)', fontSize: '0.85rem', marginBottom: 4 }}>
+                    BillMate v1.0
+                </div>
+                <div>Smart POS for Smart Shopkeepers</div>
+                {isInstalled && (
+                    <div style={{ marginTop: 4, color: 'var(--accent-400)' }}>✓ Installed as App</div>
+                )}
             </div>
 
             {/* Edit Setting Modal */}

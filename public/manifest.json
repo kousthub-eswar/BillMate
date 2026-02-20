@@ -1,0 +1,32 @@
+{
+    "name": "BillMate - Smart POS",
+    "short_name": "BillMate",
+    "description": "Offline-first billing & inventory app for smart shopkeepers",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0e0e10",
+    "theme_color": "#f5a623",
+    "orientation": "portrait",
+    "scope": "/",
+    "icons": [
+        {
+            "src": "/icons/icon-192.svg",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/icon-512.svg",
+            "sizes": "512x512",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ],
+    "categories": [
+        "business",
+        "finance",
+        "productivity"
+    ],
+    "lang": "en",
+    "dir": "ltr"
+}
