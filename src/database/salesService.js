@@ -1,6 +1,6 @@
 import { db } from './db';
 
-export async function createSale(cart, paymentMethod, customerId = null) {
+export async function createSale(cart, paymentMethod, customerId = null, discount = null) {
     const saleItems = cart.map(item => ({
         product_id: item.id,
         product_name: item.name,
@@ -10,16 +10,33 @@ export async function createSale(cart, paymentMethod, customerId = null) {
         subtotal: item.selling_price * item.quantity
     }));
 
-    const total = saleItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const profit = saleItems.reduce(
+    const subtotal = saleItems.reduce((sum, item) => sum + item.subtotal, 0);
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (discount && discount.value > 0) {
+        if (discount.type === 'percent') {
+            discountAmount = (subtotal * discount.value) / 100;
+        } else {
+            discountAmount = Math.min(discount.value, subtotal); // Can't discount more than total
+        }
+    }
+
+    const total = subtotal - discountAmount;
+    const profitBeforeDiscount = saleItems.reduce(
         (sum, item) => sum + (item.selling_price - item.cost_price) * item.quantity,
         0
     );
+    const profit = profitBeforeDiscount - discountAmount;
 
     const saleId = await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
         const id = await db.sales.add({
             date: new Date().toISOString(),
             total,
+            subtotal,
+            discount_amount: discountAmount,
+            discount_type: discount?.type || null,
+            discount_value: discount?.value || 0,
             profit,
             payment_method: paymentMethod,
             refunded: false,

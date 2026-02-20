@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     Search, Plus, Minus, Trash2, ShoppingBag,
     CreditCard, Smartphone, Banknote, ChevronRight,
-    X, Send, MessageCircle, Package, AlertTriangle, Users, Scan
+    X, Send, MessageCircle, Package, AlertTriangle, Users, Scan,
+    Percent, Tag
 } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
@@ -28,6 +29,11 @@ export default function BillingPage() {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
     const showToast = useToast();
+
+    // Discount state
+    const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percent'
+    const [discountValue, setDiscountValue] = useState('');
+    const [showDiscount, setShowDiscount] = useState(false);
 
     const loadFrequent = async () => {
         const products = await getFrequentProducts();
@@ -67,9 +73,6 @@ export default function BillingPage() {
             return;
         }
 
-        // Check if barcode product is already in cart to respect stock limit
-        // Logic handled inside setCheck
-
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
             if (existing) {
@@ -86,7 +89,6 @@ export default function BillingPage() {
             return [...prev, { ...product, quantity: 1 }];
         });
 
-        // Clear search if it was a search add
         if (query) {
             setQuery('');
             setSearchResults([]);
@@ -97,12 +99,11 @@ export default function BillingPage() {
     const handleScan = async (code) => {
         setShowScanner(false);
         const results = await searchProducts(code);
-        const product = results.find(p => p.barcode === code); // Exact match preferred
+        const product = results.find(p => p.barcode === code);
 
         if (product) {
             addToCart(product);
         } else if (results.length > 0) {
-            // If strictly no barcode match but found by name/partial (less likely for barcode scan)
             addToCart(results[0]);
         } else {
             showToast('Product not found', 'error');
@@ -129,16 +130,34 @@ export default function BillingPage() {
 
     const clearCart = () => {
         setCart([]);
+        setDiscountValue('');
+        setShowDiscount(false);
     };
 
-    const cartTotal = cart.reduce((sum, item) => sum + Number(item.selling_price) * item.quantity, 0);
+    const cartSubtotal = cart.reduce((sum, item) => sum + Number(item.selling_price) * item.quantity, 0);
     const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Calculate discount
+    const parsedDiscount = parseFloat(discountValue) || 0;
+    let discountAmount = 0;
+    if (parsedDiscount > 0) {
+        if (discountType === 'percent') {
+            discountAmount = Math.min((cartSubtotal * parsedDiscount) / 100, cartSubtotal);
+        } else {
+            discountAmount = Math.min(parsedDiscount, cartSubtotal);
+        }
+    }
+    const cartTotal = cartSubtotal - discountAmount;
 
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
         try {
-            const result = await createSale(cart, paymentMethod, selectedCustomer?.id);
+            const discountObj = discountAmount > 0
+                ? { type: discountType, value: parsedDiscount, amount: discountAmount }
+                : null;
+
+            const result = await createSale(cart, paymentMethod, selectedCustomer?.id, discountObj);
             const sale = await getSaleById(result.saleId);
             const receipt = generateReceipt(sale, sale.items, settings);
 
@@ -148,6 +167,8 @@ export default function BillingPage() {
             setCart([]);
             setSelectedCustomer(null);
             setPaymentMethod('Cash');
+            setDiscountValue('');
+            setShowDiscount(false);
             showToast('Sale completed!');
             loadFrequent();
         } catch (_err) {
@@ -291,11 +312,169 @@ export default function BillingPage() {
                         </div>
                     ))}
 
+                    {/* Discount Section */}
+                    {!showDiscount ? (
+                        <button
+                            onClick={() => setShowDiscount(true)}
+                            style={{
+                                width: '100%',
+                                padding: '10px 14px',
+                                background: 'rgba(245, 166, 35, 0.06)',
+                                border: '1px dashed rgba(245, 166, 35, 0.3)',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--primary-400)',
+                                cursor: 'pointer',
+                                fontSize: '0.82rem',
+                                fontWeight: 600,
+                                fontFamily: 'Inter, sans-serif',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8,
+                                marginTop: 8
+                            }}
+                        >
+                            <Tag size={16} />
+                            Add Discount
+                        </button>
+                    ) : (
+                        <div style={{
+                            marginTop: 8,
+                            padding: '12px 14px',
+                            background: 'rgba(245, 166, 35, 0.06)',
+                            border: '1px solid rgba(245, 166, 35, 0.2)',
+                            borderRadius: 'var(--radius-md)',
+                            animation: 'scaleIn 0.2s ease'
+                        }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginBottom: 10
+                            }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-400)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Tag size={14} />
+                                    Discount
+                                </div>
+                                <button
+                                    onClick={() => { setShowDiscount(false); setDiscountValue(''); }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                {/* Type Toggle */}
+                                <div style={{
+                                    display: 'flex',
+                                    background: 'var(--bg-primary)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    overflow: 'hidden',
+                                    border: '1px solid var(--border-color)',
+                                    flexShrink: 0
+                                }}>
+                                    <button
+                                        onClick={() => setDiscountType('flat')}
+                                        style={{
+                                            padding: '8px 14px',
+                                            background: discountType === 'flat' ? 'var(--primary-500)' : 'transparent',
+                                            color: discountType === 'flat' ? '#000' : 'var(--text-muted)',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 700,
+                                            fontSize: '0.85rem',
+                                            fontFamily: 'Inter, sans-serif',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {currency}
+                                    </button>
+                                    <button
+                                        onClick={() => setDiscountType('percent')}
+                                        style={{
+                                            padding: '8px 14px',
+                                            background: discountType === 'percent' ? 'var(--primary-500)' : 'transparent',
+                                            color: discountType === 'percent' ? '#000' : 'var(--text-muted)',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 700,
+                                            fontSize: '0.85rem',
+                                            fontFamily: 'Inter, sans-serif',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <Percent size={14} />
+                                    </button>
+                                </div>
+
+                                {/* Value Input */}
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    placeholder={discountType === 'flat' ? 'Amount' : 'Percentage'}
+                                    value={discountValue}
+                                    onChange={(e) => {
+                                        let val = e.target.value;
+                                        if (discountType === 'percent' && parseFloat(val) > 100) val = '100';
+                                        setDiscountValue(val);
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px 12px',
+                                        background: 'var(--bg-primary)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-sm)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 600,
+                                        fontFamily: 'Inter, sans-serif',
+                                        outline: 'none'
+                                    }}
+                                    id="discount-input"
+                                />
+                            </div>
+
+                            {/* Discount Preview */}
+                            {discountAmount > 0 && (
+                                <div style={{
+                                    marginTop: 8,
+                                    fontSize: '0.78rem',
+                                    color: 'var(--accent-400)',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    justifyContent: 'space-between'
+                                }}>
+                                    <span>Saving</span>
+                                    <span>-{currency}{discountAmount.toFixed(2)}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Checkout Bar */}
                     <div className="cart-total-bar" onClick={() => setShowCheckout(true)} id="checkout-button">
                         <div>
-                            <div className="cart-total-label">Total ({cartCount} items)</div>
-                            <div className="cart-total-amount">{currency}{cartTotal.toFixed(2)}</div>
+                            <div className="cart-total-label">
+                                {discountAmount > 0
+                                    ? `Total (${cartCount} items, discount applied)`
+                                    : `Total (${cartCount} items)`
+                                }
+                            </div>
+                            <div className="cart-total-amount">
+                                {discountAmount > 0 && (
+                                    <span style={{
+                                        fontSize: '0.85rem',
+                                        textDecoration: 'line-through',
+                                        opacity: 0.6,
+                                        marginRight: 8,
+                                        fontWeight: 500
+                                    }}>
+                                        {currency}{cartSubtotal.toFixed(2)}
+                                    </span>
+                                )}
+                                {currency}{cartTotal.toFixed(2)}
+                            </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Checkout</span>
@@ -321,10 +500,39 @@ export default function BillingPage() {
                         <div className="modal-title">Checkout</div>
 
                         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Total Amount</div>
-                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-300)' }}>
-                                {currency}{cartTotal.toFixed(2)}
-                            </div>
+                            {discountAmount > 0 ? (
+                                <>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Subtotal</div>
+                                    <div style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', textDecoration: 'line-through', marginBottom: 2 }}>
+                                        {currency}{cartSubtotal.toFixed(2)}
+                                    </div>
+                                    <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        padding: '4px 12px',
+                                        background: 'rgba(16, 185, 129, 0.1)',
+                                        borderRadius: 20,
+                                        marginBottom: 8
+                                    }}>
+                                        <Tag size={12} style={{ color: 'var(--accent-400)' }} />
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--accent-400)', fontWeight: 700 }}>
+                                            {discountType === 'percent' ? `${parsedDiscount}% off` : `${currency}${discountAmount.toFixed(2)} off`}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Final Amount</div>
+                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-300)' }}>
+                                        {currency}{cartTotal.toFixed(2)}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Total Amount</div>
+                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-300)' }}>
+                                        {currency}{cartTotal.toFixed(2)}
+                                    </div>
+                                </>
+                            )}
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{cartCount} items</div>
                         </div>
 

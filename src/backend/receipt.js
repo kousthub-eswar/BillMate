@@ -1,23 +1,37 @@
 // Receipt utility functions
 
 export function generateReceipt(sale, items, settings) {
-    let template = settings.receipt_template || `🧾 *{shop_name}*\n──────────────\n{items}\n──────────────\n*Total: {currency}{total}*\nPayment: {payment_method}\nDate: {date}\n\nThank you! 🙏`;
-
     const itemLines = items
         .map(item => `${item.product_name} x${item.quantity} = ${settings.currency}${item.subtotal.toFixed(2)}`)
         .join('\n');
 
     const date = new Date(sale.date).toLocaleString();
 
-    template = template
-        .replace('{shop_name}', settings.shop_name)
-        .replace('{items}', itemLines)
-        .replace('{currency}', settings.currency)
-        .replace('{total}', sale.total.toFixed(2))
-        .replace('{payment_method}', sale.payment_method)
-        .replace('{date}', date);
+    // Build receipt with optional discount line
+    let receiptLines = [
+        `🧾 *${settings.shop_name}*`,
+        `──────────────`,
+        itemLines,
+        `──────────────`
+    ];
 
-    return template;
+    if (sale.discount_amount && sale.discount_amount > 0) {
+        const subtotal = sale.subtotal || (sale.total + sale.discount_amount);
+        const discountLabel = sale.discount_type === 'percent'
+            ? `${sale.discount_value}%`
+            : `${settings.currency}${sale.discount_amount.toFixed(2)}`;
+        receiptLines.push(`Subtotal: ${settings.currency}${subtotal.toFixed(2)}`);
+        receiptLines.push(`Discount (${discountLabel}): -${settings.currency}${sale.discount_amount.toFixed(2)}`);
+        receiptLines.push(`──────────────`);
+    }
+
+    receiptLines.push(`*Total: ${settings.currency}${sale.total.toFixed(2)}*`);
+    receiptLines.push(`Payment: ${sale.payment_method}`);
+    receiptLines.push(`Date: ${date}`);
+    receiptLines.push(``);
+    receiptLines.push(`Thank you! 🙏`);
+
+    return receiptLines.join('\n');
 }
 
 export function shareOnWhatsApp(phoneNumber, message) {
