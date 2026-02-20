@@ -1,4 +1,4 @@
-import { getAllSettings } from '../database';
+// Receipt utility functions
 
 export function generateReceipt(sale, items, settings) {
     let template = settings.receipt_template || `🧾 *{shop_name}*\n──────────────\n{items}\n──────────────\n*Total: {currency}{total}*\nPayment: {payment_method}\nDate: {date}\n\nThank you! 🙏`;

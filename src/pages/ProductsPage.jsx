@@ -37,15 +37,6 @@ export default function ProductsPage() {
     const [currency, setCurrency] = useState('₹');
     const showToast = useToast();
 
-    useEffect(() => {
-        loadProducts();
-        loadCurrency();
-    }, []);
-
-    useEffect(() => {
-        filterProducts();
-    }, [query, activeCategory, products]);
-
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
@@ -73,6 +64,15 @@ export default function ProductsPage() {
 
         setFiltered(result);
     };
+
+    useEffect(() => {
+        loadProducts();
+        loadCurrency();
+    }, []);
+
+    useEffect(() => {
+        filterProducts();
+    }, [query, activeCategory, products]);
 
     const openAdd = () => {
         setEditingProduct(null);
@@ -113,7 +113,6 @@ export default function ProductsPage() {
                     selling_price: parseFloat(formData.selling_price) || 0,
                     cost_price: parseFloat(formData.cost_price) || 0,
                     stock_quantity: parseInt(formData.stock_quantity) || 0,
-                    ...formData,
                     frequently_used: formData.frequently_used ? 1 : 0
                 });
                 showToast('Product updated');
@@ -128,8 +127,8 @@ export default function ProductsPage() {
 
             setShowForm(false);
             loadProducts();
-        } catch (error) {
-            showToast('Failed to save product', 'error');
+        } catch (err) {
+            showToast(err.message || 'Failed to save product', 'error');
         }
     };
 

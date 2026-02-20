@@ -14,14 +14,14 @@ export default function SettingsPage({ onLogout }) {
     const fileInputRef = useRef(null);
     const showToast = useToast();
 
-    useEffect(() => {
-        loadSettings();
-    }, []);
-
     const loadSettings = async () => {
         const s = await getAllSettings();
         setSettings(s);
     };
+
+    useEffect(() => {
+        loadSettings();
+    }, []);
 
     const openEdit = (key, value) => {
         setShowEditModal(key);
@@ -41,7 +41,7 @@ export default function SettingsPage({ onLogout }) {
         try {
             await exportAllData();
             showToast('Data exported');
-        } catch (err) {
+        } catch (_err) {
             showToast('Export failed', 'error');
         }
     };

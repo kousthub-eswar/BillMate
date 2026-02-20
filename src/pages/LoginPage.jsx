@@ -35,7 +35,7 @@ export default function LoginPage({ onLogin }) {
             } else {
                 setError(result.error);
             }
-        } catch (err) {
+        } catch (_err) {
             setError('Something went wrong');
         }
 

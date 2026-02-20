@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ShoppingCart, Package,
   Clock, Settings, Wallet, Users
 } from 'lucide-react';
-import { isAuthenticated, getSession } from './backend/auth';
+import { isAuthenticated } from './backend/auth';
 import { initializeSettings } from './database';
 import { ToastProvider } from './components/Toast';
 import LoginPage from './pages/LoginPage';
@@ -76,8 +76,8 @@ function App() {
   const navItems = [
     { key: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { key: 'products', label: 'Products', icon: Package },
-    { key: 'billing', label: 'Bill', icon: ShoppingCart, isBilling: true },
     { key: 'sales', label: 'Sales', icon: Clock },
+    { key: 'billing', label: 'Bill', icon: ShoppingCart, isBilling: true },
     { key: 'expenses', label: 'Expenses', icon: Wallet },
     { key: 'customers', label: 'Khata', icon: Users },
     { key: 'settings', label: 'Settings', icon: Settings }
@@ -85,7 +85,7 @@ function App() {
 
   const renderPage = () => {
     switch (activePage) {
-      case 'dashboard': return <DashboardPage />;
+      case 'dashboard': return <DashboardPage onNavigate={setActivePage} />;
       case 'billing': return <BillingPage />;
       case 'products': return <ProductsPage />;
       case 'sales': return <SalesPage />;
@@ -103,6 +103,7 @@ function App() {
 
         {/* Bottom Navigation */}
         <nav className="bottom-nav">
+          {/* eslint-disable-next-line no-unused-vars */}
           {navItems.map(({ key, label, icon: Icon, isBilling }) => (
             <button
               key={key}

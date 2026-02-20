@@ -6,22 +6,20 @@ import {
     ShoppingCart,
     AlertTriangle,
     Trophy,
-    Package,
     Wallet,
-    TrendingDown
+    TrendingDown,
+    Bell
 } from 'lucide-react';
+import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
 
-export default function DashboardPage() {
+export default function DashboardPage({ onNavigate }) {
     const [stats, setStats] = useState({ totalRevenue: 0, totalProfit: 0, transactionCount: 0 });
     const [lowStock, setLowStock] = useState([]);
     const [topProducts, setTopProducts] = useState([]);
     const [currency, setCurrency] = useState('₹');
-    const [threshold, setThreshold] = useState(5);
     const [expenseTotal, setExpenseTotal] = useState(0);
-
-    useEffect(() => {
-        loadDashboard();
-    }, []);
+    const [showAlerts, setShowAlerts] = useState(false);
+    const alertCount = useAlertCount();
 
     const loadDashboard = async () => {
         const [statsData, curr, thresh, expTotal] = await Promise.all([
@@ -33,7 +31,6 @@ export default function DashboardPage() {
 
         setStats(statsData);
         setCurrency(curr);
-        setThreshold(parseInt(thresh));
         setExpenseTotal(expTotal);
 
         const [lowStockData, topData] = await Promise.all([
@@ -45,13 +42,67 @@ export default function DashboardPage() {
         setTopProducts(topData);
     };
 
+    useEffect(() => {
+        loadDashboard();
+    }, []);
+
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good Morning';
+        if (hour < 17) return 'Good Afternoon';
+        return 'Good Evening';
+    };
+
     return (
-        <div className="page-content">
-            <div className="page-header">
-                <h1>Dashboard</h1>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-                </span>
+        <div className="page-content" style={{ position: 'relative' }}>
+            {/* Greeting + Bell Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+                <div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: 4 }}>
+                        {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                    <h1 style={{
+                        fontSize: '1.6rem',
+                        fontWeight: 800,
+                        background: 'linear-gradient(135deg, var(--primary-300), var(--primary-500))',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        letterSpacing: '-0.02em'
+                    }}>
+                        {getGreeting()}! 👋
+                    </h1>
+                </div>
+
+                {/* Notification Bell */}
+                <button
+                    onClick={() => setShowAlerts(true)}
+                    className="btn btn-ghost btn-icon"
+                    style={{ position: 'relative', flexShrink: 0, marginTop: 4 }}
+                    id="alerts-bell"
+                >
+                    <Bell size={22} />
+                    {alertCount > 0 && (
+                        <span style={{
+                            position: 'absolute',
+                            top: 4,
+                            right: 4,
+                            width: 18,
+                            height: 18,
+                            borderRadius: '50%',
+                            background: 'var(--danger-500)',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
+                            animation: 'pulse 2s infinite'
+                        }}>
+                            {alertCount > 9 ? '9+' : alertCount}
+                        </span>
+                    )}
+                </button>
             </div>
 
             {/* Stats Grid */}
@@ -150,6 +201,13 @@ export default function DashboardPage() {
                     ))
                 )}
             </div>
+
+            {/* Alerts Panel */}
+            <AlertsPanel
+                isOpen={showAlerts}
+                onClose={() => setShowAlerts(false)}
+                onNavigate={onNavigate}
+            />
         </div>
     );
 }

@@ -18,11 +18,6 @@ export default function SalesPage() {
     const [currency, setCurrency] = useState('₹');
     const showToast = useToast();
 
-    useEffect(() => {
-        loadSales();
-        loadCurrency();
-    }, [filter, dateRange]);
-
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
@@ -36,6 +31,11 @@ export default function SalesPage() {
         const data = await getSales(filterParam);
         setSales(data);
     };
+
+    useEffect(() => {
+        loadSales();
+        loadCurrency();
+    }, [filter, dateRange]);
 
     const toggleExpand = async (saleId) => {
         if (expandedSale === saleId) {

@@ -20,7 +20,6 @@ export default function BillingPage() {
     const [showCheckout, setShowCheckout] = useState(false);
     const [showReceipt, setShowReceipt] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
-    const [lastSale, setLastSale] = useState(null);
     const [receiptText, setReceiptText] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const [settings, setSettings] = useState({});
@@ -29,12 +28,6 @@ export default function BillingPage() {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
     const showToast = useToast();
-
-    useEffect(() => {
-        loadFrequent();
-        loadSettings();
-        loadCustomers();
-    }, []);
 
     const loadFrequent = async () => {
         const products = await getFrequentProducts();
@@ -51,6 +44,12 @@ export default function BillingPage() {
         const c = await getAllCustomers();
         setCustomers(c);
     };
+
+    useEffect(() => {
+        loadFrequent();
+        loadSettings();
+        loadCustomers();
+    }, []);
 
     const handleSearch = useCallback(async (value) => {
         setQuery(value);
@@ -143,7 +142,6 @@ export default function BillingPage() {
             const sale = await getSaleById(result.saleId);
             const receipt = generateReceipt(sale, sale.items, settings);
 
-            setLastSale(sale);
             setReceiptText(receipt);
             setShowCheckout(false);
             setShowReceipt(true);
@@ -152,7 +150,7 @@ export default function BillingPage() {
             setPaymentMethod('Cash');
             showToast('Sale completed!');
             loadFrequent();
-        } catch (error) {
+        } catch (_err) {
             showToast('Checkout failed', 'error');
         }
     };
@@ -364,6 +362,7 @@ export default function BillingPage() {
                                 { method: 'UPI', icon: Smartphone },
                                 { method: 'Card', icon: CreditCard },
                                 { method: 'Credit', icon: Users, disabled: !selectedCustomer }
+                                // eslint-disable-next-line no-unused-vars
                             ].map(({ method, icon: Icon, disabled }) => (
                                 <button
                                     key={method}

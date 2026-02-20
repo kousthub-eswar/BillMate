@@ -23,19 +23,6 @@ export default function CustomersPage() {
 
     const showToast = useToast();
 
-    useEffect(() => {
-        loadCustomers();
-        loadCurrency();
-    }, []);
-
-    useEffect(() => {
-        if (query.trim()) {
-            handleSearch(query);
-        } else {
-            loadCustomers();
-        }
-    }, [query]);
-
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
@@ -53,6 +40,19 @@ export default function CustomersPage() {
         setCustomers(results);
     };
 
+    useEffect(() => {
+        loadCustomers();
+        loadCurrency();
+    }, []);
+
+    useEffect(() => {
+        if (query.trim()) {
+            handleSearch(query);
+        } else {
+            loadCustomers();
+        }
+    }, [query]);
+
     const handleAdd = async () => {
         if (!formData.name.trim()) {
             showToast('Name is required', 'error');
@@ -65,7 +65,7 @@ export default function CustomersPage() {
             setShowAddModal(false);
             setFormData({ name: '', phone: '' });
             loadCustomers();
-        } catch (err) {
+        } catch (_err) {
             showToast('Failed to add customer', 'error');
         }
     };
@@ -88,7 +88,7 @@ export default function CustomersPage() {
             setShowSettleModal(null);
             setSettleAmount('');
             loadCustomers();
-        } catch (err) {
+        } catch (_err) {
             showToast('Settlement failed', 'error');
         }
     };

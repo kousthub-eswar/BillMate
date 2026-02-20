@@ -9,8 +9,16 @@ export async function getProductById(id) {
 }
 
 export async function addProduct(product) {
+    // Check for duplicate name (case-insensitive)
+    const existing = await db.products
+        .filter(p => p.name.toLowerCase().trim() === product.name.toLowerCase().trim())
+        .first();
+    if (existing) {
+        throw new Error(`Product "${existing.name}" already exists`);
+    }
+
     return await db.products.add({
-        name: product.name,
+        name: product.name.trim(),
         selling_price: parseFloat(product.selling_price),
         cost_price: parseFloat(product.cost_price),
         stock_quantity: parseInt(product.stock_quantity),

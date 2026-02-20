@@ -25,11 +25,6 @@ export default function ExpensesPage() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
     const showToast = useToast();
 
-    useEffect(() => {
-        loadExpenses();
-        loadCurrency();
-    }, []);
-
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
@@ -39,6 +34,11 @@ export default function ExpensesPage() {
         const data = await getTodayExpenses();
         setExpenses(data);
     };
+
+    useEffect(() => {
+        loadExpenses();
+        loadCurrency();
+    }, []);
 
     const handleAddExpense = async () => {
         if (!selectedType || !amount || parseFloat(amount) <= 0) {
@@ -57,7 +57,7 @@ export default function ExpensesPage() {
             setAmount('');
             setNote('');
             loadExpenses();
-        } catch (err) {
+        } catch (_err) {
             showToast('Failed to add expense', 'error');
         }
     };
@@ -99,6 +99,7 @@ export default function ExpensesPage() {
                 Expense Type
             </div>
             <div className="expense-type-grid">
+                {/* eslint-disable-next-line no-unused-vars */}
                 {EXPENSE_TYPES.map(({ type, icon: Icon, color, iconColor }) => (
                     <button
                         key={type}
