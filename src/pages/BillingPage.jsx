@@ -8,7 +8,8 @@ import {
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
     searchProducts, getFrequentProducts, createSale,
-    getSaleById, getAllSettings, getAllCustomers
+    getSaleById, getAllSettings, getAllCustomers,
+    addProduct, getCategories
 } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
@@ -35,6 +36,14 @@ export default function BillingPage() {
     const [discountValue, setDiscountValue] = useState('');
     const [showDiscount, setShowDiscount] = useState(false);
 
+    // Quick Add Product state
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
+    const [quickAddForm, setQuickAddForm] = useState({
+        name: '', selling_price: '', cost_price: '', stock_quantity: '', category: ''
+    });
+    const [categories, setCategories] = useState([]);
+    const [quickAddLoading, setQuickAddLoading] = useState(false);
+
     const loadFrequent = async () => {
         const products = await getFrequentProducts();
         setFrequentProducts(products);
@@ -55,7 +64,13 @@ export default function BillingPage() {
         loadFrequent();
         loadSettings();
         loadCustomers();
+        loadCategories();
     }, []);
+
+    const loadCategories = async () => {
+        const cats = await getCategories();
+        setCategories(cats);
+    };
 
     const handleSearch = useCallback(async (value) => {
         setQuery(value);
@@ -250,6 +265,50 @@ export default function BillingPage() {
                             </div>
                         )
                     })}
+                </div>
+            )}
+
+            {/* No Results - Quick Add Prompt */}
+            {query.trim().length > 0 && searchResults.length === 0 && (
+                <div style={{
+                    padding: '20px 16px',
+                    textAlign: 'center',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px dashed var(--border-color)',
+                    marginBottom: 16
+                }}>
+                    <Package size={32} style={{ color: 'var(--text-muted)', marginBottom: 8, opacity: 0.6 }} />
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                        Product not found
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+                        &quot;{query}&quot; doesn&apos;t match any products
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                            setQuickAddForm({ name: query.trim(), selling_price: '', cost_price: '', stock_quantity: '', category: '' });
+                            setShowQuickAdd(true);
+                        }}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '10px 20px',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-md)',
+                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #c88b20))',
+                            color: '#000',
+                            border: 'none',
+                            cursor: 'pointer'
+                        }}
+                        id="quick-add-product-btn"
+                    >
+                        <Plus size={18} />
+                        Quick Add Product
+                    </button>
                 </div>
             )}
 
@@ -641,6 +700,132 @@ export default function BillingPage() {
                             onClick={() => { setShowReceipt(false); setCustomerPhone(''); }}
                         >
                             Done
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Add Product Modal */}
+            {showQuickAdd && (
+                <div className="modal-overlay" onClick={() => setShowQuickAdd(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-handle" />
+                        <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Plus size={18} style={{ color: 'var(--primary-400)' }} />
+                            Quick Add Product
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Product Name *</label>
+                            <input
+                                className="form-input"
+                                type="text"
+                                placeholder="e.g. Maggi Noodles"
+                                value={quickAddForm.name}
+                                onChange={(e) => setQuickAddForm(prev => ({ ...prev, name: e.target.value }))}
+                                id="quick-add-name"
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label">Selling Price *</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    inputMode="decimal"
+                                    placeholder="0.00"
+                                    value={quickAddForm.selling_price}
+                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, selling_price: e.target.value }))}
+                                    id="quick-add-selling-price"
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label">Cost Price *</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    inputMode="decimal"
+                                    placeholder="0.00"
+                                    value={quickAddForm.cost_price}
+                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, cost_price: e.target.value }))}
+                                    id="quick-add-cost-price"
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label">Stock Quantity *</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    inputMode="numeric"
+                                    placeholder="0"
+                                    value={quickAddForm.stock_quantity}
+                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, stock_quantity: e.target.value }))}
+                                    id="quick-add-stock"
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label">Category</label>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        placeholder="General"
+                                        value={quickAddForm.category}
+                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, category: e.target.value }))}
+                                        list="quick-add-categories"
+                                        id="quick-add-category"
+                                    />
+                                    <datalist id="quick-add-categories">
+                                        {categories.map(cat => (
+                                            <option key={cat} value={cat} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            className="btn btn-success btn-lg btn-block"
+                            disabled={quickAddLoading || !quickAddForm.name.trim() || !quickAddForm.selling_price || !quickAddForm.cost_price || !quickAddForm.stock_quantity}
+                            onClick={async () => {
+                                setQuickAddLoading(true);
+                                try {
+                                    const productId = await addProduct({
+                                        name: quickAddForm.name.trim(),
+                                        selling_price: quickAddForm.selling_price,
+                                        cost_price: quickAddForm.cost_price,
+                                        stock_quantity: quickAddForm.stock_quantity,
+                                        category: quickAddForm.category || 'General'
+                                    });
+                                    // Add the newly created product to cart
+                                    const newProduct = {
+                                        id: productId,
+                                        name: quickAddForm.name.trim(),
+                                        selling_price: parseFloat(quickAddForm.selling_price),
+                                        cost_price: parseFloat(quickAddForm.cost_price),
+                                        stock_quantity: parseInt(quickAddForm.stock_quantity),
+                                        category: quickAddForm.category || 'General'
+                                    };
+                                    addToCart(newProduct);
+                                    setShowQuickAdd(false);
+                                    setQuery('');
+                                    setSearchResults([]);
+                                    loadCategories();
+                                    showToast(`${newProduct.name} created & added to cart`);
+                                } catch (err) {
+                                    showToast(err.message || 'Failed to add product', 'error');
+                                } finally {
+                                    setQuickAddLoading(false);
+                                }
+                            }}
+                            id="quick-add-submit"
+                            style={{ marginTop: 8 }}
+                        >
+                            {quickAddLoading ? 'Adding...' : 'Add Product & Add to Cart'}
                         </button>
                     </div>
                 </div>

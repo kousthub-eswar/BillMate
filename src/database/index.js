@@ -16,6 +16,7 @@ export {
     getSaleById,
     getSales,
     refundSale,
+    undoLastSale,
     getTodayStats,
     getTopSellingProducts
 } from './salesService';

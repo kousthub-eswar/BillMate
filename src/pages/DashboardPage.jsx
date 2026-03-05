@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTodayStats, getLowStockProducts, getTopSellingProducts, getSetting, getTodayExpenseTotal } from '../database';
+import { getTodayStats, getLowStockProducts, getTopSellingProducts, getSetting, getTodayExpenseTotal, undoLastSale } from '../database';
 import {
     TrendingUp,
     DollarSign,
@@ -8,9 +8,12 @@ import {
     Trophy,
     Wallet,
     TrendingDown,
-    Bell
+    Bell,
+    Undo2,
+    BarChart3
 } from 'lucide-react';
 import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
+import { useToast } from '../components/Toast';
 
 export default function DashboardPage({ onNavigate }) {
     const [stats, setStats] = useState({ totalRevenue: 0, totalProfit: 0, transactionCount: 0 });
@@ -19,7 +22,9 @@ export default function DashboardPage({ onNavigate }) {
     const [currency, setCurrency] = useState('₹');
     const [expenseTotal, setExpenseTotal] = useState(0);
     const [showAlerts, setShowAlerts] = useState(false);
+    const [showUndoConfirm, setShowUndoConfirm] = useState(false);
     const alertCount = useAlertCount();
+    const showToast = useToast();
 
     const loadDashboard = async () => {
         const [statsData, curr, thresh, expTotal] = await Promise.all([
@@ -45,6 +50,21 @@ export default function DashboardPage({ onNavigate }) {
     useEffect(() => {
         loadDashboard();
     }, []);
+
+    const handleUndoLastSale = async () => {
+        try {
+            const result = await undoLastSale();
+            if (result.success) {
+                showToast('Last sale undone successfully');
+                loadDashboard();
+            } else {
+                showToast(result.message || 'No recent sale to undo', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to undo sale', 'error');
+        }
+        setShowUndoConfirm(false);
+    };
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -102,6 +122,56 @@ export default function DashboardPage({ onNavigate }) {
                             {alertCount > 9 ? '9+' : alertCount}
                         </span>
                     )}
+                </button>
+            </div>
+
+            {/* Quick Actions */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                <button
+                    className="btn btn-primary"
+                    onClick={() => onNavigate('day-summary')}
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #c88b20))',
+                        color: '#000',
+                        border: 'none',
+                        cursor: 'pointer'
+                    }}
+                    id="view-day-summary"
+                >
+                    <BarChart3 size={18} />
+                    View Day Summary
+                </button>
+                <button
+                    className="btn"
+                    onClick={() => setShowUndoConfirm(true)}
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: 'var(--danger-400)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        cursor: 'pointer'
+                    }}
+                    id="undo-last-sale"
+                >
+                    <Undo2 size={18} />
+                    Undo Last Sale
                 </button>
             </div>
 
@@ -208,6 +278,63 @@ export default function DashboardPage({ onNavigate }) {
                 onClose={() => setShowAlerts(false)}
                 onNavigate={onNavigate}
             />
+
+            {/* Undo Confirmation Dialog */}
+            {showUndoConfirm && (
+                <div className="modal-overlay" onClick={() => setShowUndoConfirm(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+                        <div className="modal-handle" />
+                        <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
+                            <div style={{
+                                width: 56, height: 56,
+                                borderRadius: '50%',
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0 auto 16px'
+                            }}>
+                                <Undo2 size={28} style={{ color: 'var(--danger-400)' }} />
+                            </div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
+                                Undo Last Sale?
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                Are you sure you want to undo the most recent sale? This will restore product stock and reverse the transaction.
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                                className="btn btn-block"
+                                onClick={() => setShowUndoConfirm(false)}
+                                style={{
+                                    flex: 1,
+                                    background: 'var(--bg-tertiary)',
+                                    color: 'var(--text-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    fontWeight: 700
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-block"
+                                onClick={handleUndoLastSale}
+                                style={{
+                                    flex: 1,
+                                    background: 'var(--danger-500)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    fontWeight: 700
+                                }}
+                                id="confirm-undo-sale"
+                            >
+                                Yes, Undo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

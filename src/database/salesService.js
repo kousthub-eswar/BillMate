@@ -143,6 +143,41 @@ export async function refundSale(saleId) {
     });
 }
 
+export async function undoLastSale() {
+    return await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
+        // Find most recent non-refunded sale
+        const allSales = await db.sales.orderBy('date').reverse().toArray();
+        const lastSale = allSales.find(s => !s.refunded);
+        if (!lastSale) return { success: false, message: 'No recent sale to undo' };
+
+        // Mark as refunded
+        await db.sales.update(lastSale.id, { refunded: true });
+
+        // Restore stock quantities
+        const items = await db.saleItems.where('sale_id').equals(lastSale.id).toArray();
+        for (const item of items) {
+            const product = await db.products.get(item.product_id);
+            if (product) {
+                await db.products.update(item.product_id, {
+                    stock_quantity: product.stock_quantity + item.quantity
+                });
+            }
+        }
+
+        // If it was a Credit sale, reverse customer balance
+        if (lastSale.payment_method === 'Credit' && lastSale.customer_id) {
+            const customer = await db.customers.get(lastSale.customer_id);
+            if (customer) {
+                await db.customers.update(lastSale.customer_id, {
+                    balance: Math.max(0, (customer.balance || 0) - lastSale.total)
+                });
+            }
+        }
+
+        return { success: true, sale: lastSale };
+    });
+}
+
 export async function getTodayStats() {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

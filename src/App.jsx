@@ -15,6 +15,7 @@ import SalesPage from './pages/SalesPage';
 import ExpensesPage from './pages/ExpensesPage';
 import CustomersPage from './pages/CustomersPage';
 import SettingsPage from './pages/SettingsPage';
+import DaySummaryPage from './pages/DaySummaryPage';
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
@@ -67,6 +68,7 @@ function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard': return <DashboardPage onNavigate={setActivePage} />;
+      case 'day-summary': return <DaySummaryPage onBack={() => setActivePage('dashboard')} />;
       case 'billing': return <BillingPage />;
       case 'products': return <ProductsPage />;
       case 'sales': return <SalesPage />;
