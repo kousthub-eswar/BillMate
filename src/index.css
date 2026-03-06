@@ -1283,17 +1283,7 @@ select.form-input {
   text-align: center;
 }
 
-.login-logo .logo-icon {
-  width: 72px;
-  height: 72px;
-  background: linear-gradient(135deg, var(--primary-600), var(--primary-400));
-  border-radius: var(--radius-xl);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 20px;
-  box-shadow: var(--shadow-glow-strong);
-}
+
 
 .login-logo h1 {
   font-size: 2rem;

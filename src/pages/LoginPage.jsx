@@ -46,7 +46,7 @@ export default function LoginPage({ onLogin }) {
     return (
         <div className="login-container">
             <div className="login-logo">
-                <Logo size={72} iconSize={40} borderRadius={20} />
+                <Logo size={72} iconSize={40} borderRadius={20} style={{ margin: '0 auto 16px' }} />
                 <h1>BillMate</h1>
                 <p>Simple billing for smart vendors</p>
             </div>
