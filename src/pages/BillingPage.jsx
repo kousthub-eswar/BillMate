@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     Search, Plus, Minus, Trash2, ShoppingBag,
     CreditCard, Smartphone, Banknote, ChevronRight,
-    X, Send, MessageCircle, Package, AlertTriangle, Users, Scan,
+    X, MessageCircle, Package, AlertTriangle, Users, Scan,
     Percent, Tag
 } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -109,6 +109,14 @@ export default function BillingPage() {
             setSearchResults([]);
         }
         showToast(`${product.name} added`);
+
+        // Trigger cart pop animation
+        const el = document.getElementById('checkout-button');
+        if (el) {
+            el.classList.remove('cart-pop');
+            void el.offsetWidth;
+            el.classList.add('cart-pop');
+        }
     };
 
     const handleScan = async (code) => {
@@ -199,6 +207,12 @@ export default function BillingPage() {
 
     const currency = settings.currency || '₹';
 
+    const formatCurrency = (val) => {
+        const num = Number(val);
+        if (num === 0) return `${currency}0`;
+        return num % 1 === 0 ? `${currency}${num.toLocaleString('en-IN')}` : `${currency}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
     return (
         <div className="page-content">
             <div className="page-header">
@@ -260,7 +274,7 @@ export default function BillingPage() {
                                     )}
                                 </div>
                                 <div className="product-list-price">
-                                    {currency}{Number(product.selling_price).toFixed(2)}
+                                    {formatCurrency(product.selling_price)}
                                 </div>
                             </div>
                         )
@@ -328,7 +342,7 @@ export default function BillingPage() {
                                     onClick={() => !isOutOfStock && addToCart(product)}
                                 >
                                     <div className="quick-name">{product.name}</div>
-                                    <div className="quick-price">{currency}{product.selling_price}</div>
+                                    <div className="quick-price">{formatCurrency(product.selling_price)}</div>
                                 </div>
                             )
                         })}
@@ -351,7 +365,7 @@ export default function BillingPage() {
                         <div key={item.id} className="cart-item">
                             <div className="cart-item-info">
                                 <div className="cart-item-name">{item.name}</div>
-                                <div className="cart-item-price">{currency}{item.selling_price} each</div>
+                                <div className="cart-item-price">{formatCurrency(item.selling_price)} each</div>
                             </div>
                             <div className="qty-controls">
                                 <button className="qty-btn" onClick={() => updateQuantity(item.id, -1)}>
@@ -363,7 +377,7 @@ export default function BillingPage() {
                                 </button>
                             </div>
                             <div className="cart-item-subtotal">
-                                {currency}{(Number(item.selling_price) * item.quantity).toFixed(2)}
+                                {formatCurrency(Number(item.selling_price) * item.quantity)}
                             </div>
                             <button className="btn btn-ghost" onClick={() => removeFromCart(item.id)} style={{ padding: 4, color: 'var(--danger-400)' }}>
                                 <Trash2 size={16} />
@@ -516,8 +530,8 @@ export default function BillingPage() {
                         <div>
                             <div className="cart-total-label">
                                 {discountAmount > 0
-                                    ? `Total (${cartCount} items, discount applied)`
-                                    : `Total (${cartCount} items)`
+                                    ? `${cartCount} items · discount applied`
+                                    : `${cartCount} items`
                                 }
                             </div>
                             <div className="cart-total-amount">
@@ -529,15 +543,15 @@ export default function BillingPage() {
                                         marginRight: 8,
                                         fontWeight: 500
                                     }}>
-                                        {currency}{cartSubtotal.toFixed(2)}
+                                        {formatCurrency(cartSubtotal)}
                                     </span>
                                 )}
-                                {currency}{cartTotal.toFixed(2)}
+                                {formatCurrency(cartTotal)}
                             </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Checkout</span>
-                            <ChevronRight size={20} />
+                        <div className="checkout-side">
+                            <span>Checkout</span>
+                            <ChevronRight size={18} />
                         </div>
                     </div>
                 </div>
@@ -563,7 +577,7 @@ export default function BillingPage() {
                                 <>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Subtotal</div>
                                     <div style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', textDecoration: 'line-through', marginBottom: 2 }}>
-                                        {currency}{cartSubtotal.toFixed(2)}
+                                        {formatCurrency(cartSubtotal)}
                                     </div>
                                     <div style={{
                                         display: 'inline-flex',
@@ -576,19 +590,19 @@ export default function BillingPage() {
                                     }}>
                                         <Tag size={12} style={{ color: 'var(--accent-400)' }} />
                                         <span style={{ fontSize: '0.78rem', color: 'var(--accent-400)', fontWeight: 700 }}>
-                                            {discountType === 'percent' ? `${parsedDiscount}% off` : `${currency}${discountAmount.toFixed(2)} off`}
+                                            {discountType === 'percent' ? `${parsedDiscount}% off` : `${formatCurrency(discountAmount)} off`}
                                         </span>
                                     </div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Final Amount</div>
-                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-300)' }}>
-                                        {currency}{cartTotal.toFixed(2)}
+                                    <div style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--accent-400)', letterSpacing: '-0.03em' }}>
+                                        {formatCurrency(cartTotal)}
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Total Amount</div>
-                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-300)' }}>
-                                        {currency}{cartTotal.toFixed(2)}
+                                    <div style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--accent-400)', letterSpacing: '-0.03em' }}>
+                                        {formatCurrency(cartTotal)}
                                     </div>
                                 </>
                             )}
@@ -652,184 +666,191 @@ export default function BillingPage() {
                             Complete Sale
                         </button>
                     </div>
-                </div>
-            )}
+                </div >
+            )
+            }
 
             {/* Barcode Scanner Modal */}
-            {showScanner && (
-                <BarcodeScanner
-                    onScan={handleScan}
-                    onClose={() => setShowScanner(false)}
-                />
-            )}
+            {
+                showScanner && (
+                    <BarcodeScanner
+                        onScan={handleScan}
+                        onClose={() => setShowScanner(false)}
+                    />
+                )
+            }
 
             {/* Receipt Modal */}
-            {showReceipt && (
-                <div className="modal-overlay" onClick={() => setShowReceipt(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-handle" />
-                        <div className="modal-title">Receipt</div>
+            {
+                showReceipt && (
+                    <div className="modal-overlay" onClick={() => setShowReceipt(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                            <div className="modal-handle" />
+                            <div className="modal-title">Receipt</div>
 
-                        <div className="receipt-preview">
-                            {receiptText}
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Customer Phone (for WhatsApp)</label>
-                            <div className="phone-input-group">
-                                <input
-                                    className="form-input"
-                                    type="tel"
-                                    placeholder="e.g. 919876543210"
-                                    value={customerPhone}
-                                    onChange={(e) => setCustomerPhone(e.target.value)}
-                                    id="customer-phone"
-                                />
-                                <button
-                                    className="btn btn-success"
-                                    onClick={handleShareWhatsApp}
-                                    disabled={!customerPhone.trim()}
-                                >
-                                    <MessageCircle size={18} />
-                                </button>
+                            <div className="receipt-preview">
+                                {receiptText}
                             </div>
-                        </div>
 
-                        <button
-                            className="btn btn-primary btn-block"
-                            onClick={() => { setShowReceipt(false); setCustomerPhone(''); }}
-                        >
-                            Done
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Quick Add Product Modal */}
-            {showQuickAdd && (
-                <div className="modal-overlay" onClick={() => setShowQuickAdd(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-handle" />
-                        <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Plus size={18} style={{ color: 'var(--primary-400)' }} />
-                            Quick Add Product
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Product Name *</label>
-                            <input
-                                className="form-input"
-                                type="text"
-                                placeholder="e.g. Maggi Noodles"
-                                value={quickAddForm.name}
-                                onChange={(e) => setQuickAddForm(prev => ({ ...prev, name: e.target.value }))}
-                                id="quick-add-name"
-                            />
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Selling Price *</label>
-                                <input
-                                    className="form-input"
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    value={quickAddForm.selling_price}
-                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, selling_price: e.target.value }))}
-                                    id="quick-add-selling-price"
-                                />
-                            </div>
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Cost Price *</label>
-                                <input
-                                    className="form-input"
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    value={quickAddForm.cost_price}
-                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, cost_price: e.target.value }))}
-                                    id="quick-add-cost-price"
-                                />
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Stock Quantity *</label>
-                                <input
-                                    className="form-input"
-                                    type="number"
-                                    inputMode="numeric"
-                                    placeholder="0"
-                                    value={quickAddForm.stock_quantity}
-                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, stock_quantity: e.target.value }))}
-                                    id="quick-add-stock"
-                                />
-                            </div>
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Category</label>
-                                <div style={{ position: 'relative' }}>
+                            <div className="form-group">
+                                <label className="form-label">Customer Phone (for WhatsApp)</label>
+                                <div className="phone-input-group">
                                     <input
                                         className="form-input"
-                                        type="text"
-                                        placeholder="General"
-                                        value={quickAddForm.category}
-                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, category: e.target.value }))}
-                                        list="quick-add-categories"
-                                        id="quick-add-category"
+                                        type="tel"
+                                        placeholder="e.g. 919876543210"
+                                        value={customerPhone}
+                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                        id="customer-phone"
                                     />
-                                    <datalist id="quick-add-categories">
-                                        {categories.map(cat => (
-                                            <option key={cat} value={cat} />
-                                        ))}
-                                    </datalist>
+                                    <button
+                                        className="btn btn-success"
+                                        onClick={handleShareWhatsApp}
+                                        disabled={!customerPhone.trim()}
+                                    >
+                                        <MessageCircle size={18} />
+                                    </button>
                                 </div>
                             </div>
-                        </div>
 
-                        <button
-                            className="btn btn-success btn-lg btn-block"
-                            disabled={quickAddLoading || !quickAddForm.name.trim() || !quickAddForm.selling_price || !quickAddForm.cost_price || !quickAddForm.stock_quantity}
-                            onClick={async () => {
-                                setQuickAddLoading(true);
-                                try {
-                                    const productId = await addProduct({
-                                        name: quickAddForm.name.trim(),
-                                        selling_price: quickAddForm.selling_price,
-                                        cost_price: quickAddForm.cost_price,
-                                        stock_quantity: quickAddForm.stock_quantity,
-                                        category: quickAddForm.category || 'General'
-                                    });
-                                    // Add the newly created product to cart
-                                    const newProduct = {
-                                        id: productId,
-                                        name: quickAddForm.name.trim(),
-                                        selling_price: parseFloat(quickAddForm.selling_price),
-                                        cost_price: parseFloat(quickAddForm.cost_price),
-                                        stock_quantity: parseInt(quickAddForm.stock_quantity),
-                                        category: quickAddForm.category || 'General'
-                                    };
-                                    addToCart(newProduct);
-                                    setShowQuickAdd(false);
-                                    setQuery('');
-                                    setSearchResults([]);
-                                    loadCategories();
-                                    showToast(`${newProduct.name} created & added to cart`);
-                                } catch (err) {
-                                    showToast(err.message || 'Failed to add product', 'error');
-                                } finally {
-                                    setQuickAddLoading(false);
-                                }
-                            }}
-                            id="quick-add-submit"
-                            style={{ marginTop: 8 }}
-                        >
-                            {quickAddLoading ? 'Adding...' : 'Add Product & Add to Cart'}
-                        </button>
+                            <button
+                                className="btn btn-primary btn-block"
+                                onClick={() => { setShowReceipt(false); setCustomerPhone(''); }}
+                            >
+                                Done
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Quick Add Product Modal */}
+            {
+                showQuickAdd && (
+                    <div className="modal-overlay" onClick={() => setShowQuickAdd(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                            <div className="modal-handle" />
+                            <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Plus size={18} style={{ color: 'var(--primary-400)' }} />
+                                Quick Add Product
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Product Name *</label>
+                                <input
+                                    className="form-input"
+                                    type="text"
+                                    placeholder="e.g. Maggi Noodles"
+                                    value={quickAddForm.name}
+                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, name: e.target.value }))}
+                                    id="quick-add-name"
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">Selling Price *</label>
+                                    <input
+                                        className="form-input"
+                                        type="number"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={quickAddForm.selling_price}
+                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, selling_price: e.target.value }))}
+                                        id="quick-add-selling-price"
+                                    />
+                                </div>
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">Cost Price *</label>
+                                    <input
+                                        className="form-input"
+                                        type="number"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={quickAddForm.cost_price}
+                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, cost_price: e.target.value }))}
+                                        id="quick-add-cost-price"
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">Stock Quantity *</label>
+                                    <input
+                                        className="form-input"
+                                        type="number"
+                                        inputMode="numeric"
+                                        placeholder="0"
+                                        value={quickAddForm.stock_quantity}
+                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, stock_quantity: e.target.value }))}
+                                        id="quick-add-stock"
+                                    />
+                                </div>
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">Category</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            className="form-input"
+                                            type="text"
+                                            placeholder="General"
+                                            value={quickAddForm.category}
+                                            onChange={(e) => setQuickAddForm(prev => ({ ...prev, category: e.target.value }))}
+                                            list="quick-add-categories"
+                                            id="quick-add-category"
+                                        />
+                                        <datalist id="quick-add-categories">
+                                            {categories.map(cat => (
+                                                <option key={cat} value={cat} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                className="btn btn-success btn-lg btn-block"
+                                disabled={quickAddLoading || !quickAddForm.name.trim() || !quickAddForm.selling_price || !quickAddForm.cost_price || !quickAddForm.stock_quantity}
+                                onClick={async () => {
+                                    setQuickAddLoading(true);
+                                    try {
+                                        const productId = await addProduct({
+                                            name: quickAddForm.name.trim(),
+                                            selling_price: quickAddForm.selling_price,
+                                            cost_price: quickAddForm.cost_price,
+                                            stock_quantity: quickAddForm.stock_quantity,
+                                            category: quickAddForm.category || 'General'
+                                        });
+                                        // Add the newly created product to cart
+                                        const newProduct = {
+                                            id: productId,
+                                            name: quickAddForm.name.trim(),
+                                            selling_price: parseFloat(quickAddForm.selling_price),
+                                            cost_price: parseFloat(quickAddForm.cost_price),
+                                            stock_quantity: parseInt(quickAddForm.stock_quantity),
+                                            category: quickAddForm.category || 'General'
+                                        };
+                                        addToCart(newProduct);
+                                        setShowQuickAdd(false);
+                                        setQuery('');
+                                        setSearchResults([]);
+                                        loadCategories();
+                                        showToast(`${newProduct.name} created & added to cart`);
+                                    } catch (err) {
+                                        showToast(err.message || 'Failed to add product', 'error');
+                                    } finally {
+                                        setQuickAddLoading(false);
+                                    }
+                                }}
+                                id="quick-add-submit"
+                                style={{ marginTop: 8 }}
+                            >
+                                {quickAddLoading ? 'Adding...' : 'Add Product & Add to Cart'}
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

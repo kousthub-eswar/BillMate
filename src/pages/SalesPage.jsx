@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
-    Calendar, ShoppingBag, CreditCard
+    ShoppingBag
 } from 'lucide-react';
 import { getSales, getSaleById, refundSale, getSetting } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
@@ -17,6 +17,12 @@ export default function SalesPage() {
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
     const [currency, setCurrency] = useState('₹');
     const showToast = useToast();
+
+    const formatCurrency = (val) => {
+        const num = Number(val);
+        if (num === 0) return `${currency}0`;
+        return num % 1 === 0 ? `${currency}${num.toLocaleString('en-IN')}` : `${currency}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
@@ -90,7 +96,7 @@ export default function SalesPage() {
                 <h1>Sales</h1>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                     <div>{sales.length} transactions</div>
-                    <div style={{ color: 'var(--primary-300)', fontWeight: 600 }}>{currency}{totalRevenue.toFixed(2)}</div>
+                    <div style={{ color: 'var(--primary-300)', fontWeight: 600 }}>{formatCurrency(totalRevenue)}</div>
                 </div>
             </div>
 
@@ -133,9 +139,9 @@ export default function SalesPage() {
             {/* Sales List */}
             {sales.length === 0 ? (
                 <div className="empty-state">
-                    <Clock size={48} />
-                    <h3>No Sales</h3>
-                    <p>No transactions found for this period</p>
+                    <Clock size={52} />
+                    <h3>No Sales Yet</h3>
+                    <p>No transactions found for this period. Sales will appear here after billing.</p>
                 </div>
             ) : (
                 sales.map(sale => (
@@ -156,7 +162,7 @@ export default function SalesPage() {
                             </div>
                             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                                 <div className="sale-card-amount" style={sale.refunded ? { textDecoration: 'line-through' } : {}}>
-                                    {currency}{sale.total.toFixed(2)}
+                                    {formatCurrency(sale.total)}
                                 </div>
                                 {expandedSale === sale.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </div>
@@ -167,7 +173,7 @@ export default function SalesPage() {
                                 <ShoppingBag size={12} /> {sale.item_count || '?'} items
                             </span>
                             <span style={{ color: 'var(--accent-400)' }}>
-                                Profit: {currency}{sale.profit?.toFixed(2) || '0.00'}
+                                Profit: {formatCurrency(sale.profit || 0)}
                             </span>
                         </div>
 

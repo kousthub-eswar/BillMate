@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-    Users, UserPlus, Search, Phone, ArrowDownLeft,
-    ArrowUpRight, History
+    Users, UserPlus, Search, Phone,
+    History
 } from 'lucide-react';
 import {
     getAllCustomers, addCustomer, updateCustomerBalance,
@@ -131,9 +131,12 @@ export default function CustomersPage() {
             <div className="customer-list">
                 {customers.length === 0 ? (
                     <div className="empty-state">
-                        <Users size={48} />
-                        <h3>No Customers</h3>
-                        <p>Add customers to manage credit/udhaar</p>
+                        <Users size={52} />
+                        <h3>No Customers Yet</h3>
+                        <p>Add customers to track credit (udhaar) and payment history.</p>
+                        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                            <UserPlus size={18} /> Add Customer
+                        </button>
                     </div>
                 ) : (
                     customers.map(c => (

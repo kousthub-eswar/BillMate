@@ -60,8 +60,8 @@ function App() {
     { key: 'products', label: 'Products', icon: Package },
     { key: 'sales', label: 'Sales', icon: Clock },
     { key: 'billing', label: 'Bill', icon: ShoppingCart, isBilling: true },
-    { key: 'expenses', label: 'Expenses', icon: Wallet },
     { key: 'customers', label: 'Khata', icon: Users },
+    { key: 'expenses', label: 'Expenses', icon: Wallet },
     { key: 'settings', label: 'Settings', icon: Settings }
   ];
 

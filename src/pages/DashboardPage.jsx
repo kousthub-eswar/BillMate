@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getTodayStats, getLowStockProducts, getTopSellingProducts, getSetting, getTodayExpenseTotal, undoLastSale } from '../database';
 import {
-    TrendingUp,
     DollarSign,
     ShoppingCart,
     AlertTriangle,
@@ -64,6 +63,12 @@ export default function DashboardPage({ onNavigate }) {
             showToast('Failed to undo sale', 'error');
         }
         setShowUndoConfirm(false);
+    };
+
+    const formatCurrency = (val) => {
+        const num = Number(val);
+        if (num === 0) return `${currency}0`;
+        return num % 1 === 0 ? `${currency}${num.toLocaleString('en-IN')}` : `${currency}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
     const getGreeting = () => {
@@ -179,48 +184,38 @@ export default function DashboardPage({ onNavigate }) {
             <div className="stats-grid">
                 <div className="stat-card">
                     <div className="stat-icon revenue">
-                        <DollarSign size={20} />
+                        <DollarSign size={18} />
                     </div>
+                    <div className="stat-value">{formatCurrency(stats.totalRevenue)}</div>
                     <div className="stat-label">Today's Revenue</div>
-                    <div className="stat-value">{currency}{stats.totalRevenue.toFixed(2)}</div>
                 </div>
 
                 <div className="stat-card">
-                    <div className="stat-icon profit">
-                        <TrendingUp size={20} />
+                    <div className="stat-icon net-profit">
+                        <TrendingDown size={18} />
                     </div>
-                    <div className="stat-label">Profit</div>
-                    <div className="stat-value" style={{ color: 'var(--accent-400)' }}>
-                        {currency}{stats.totalProfit.toFixed(2)}
+                    <div className="stat-value" style={{ color: (stats.totalProfit - expenseTotal) >= 0 ? 'var(--accent-400)' : 'var(--danger-400)' }}>
+                        {formatCurrency(stats.totalProfit - expenseTotal)}
                     </div>
+                    <div className="stat-label">Net Profit</div>
                 </div>
 
                 <div className="stat-card">
                     <div className="stat-icon transactions">
-                        <ShoppingCart size={20} />
+                        <ShoppingCart size={18} />
                     </div>
-                    <div className="stat-label">Transactions</div>
                     <div className="stat-value">{stats.transactionCount}</div>
+                    <div className="stat-label">Transactions</div>
                 </div>
 
                 <div className="stat-card">
-                    <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-400)' }}>
-                        <Wallet size={20} />
+                    <div className="stat-icon expenses">
+                        <Wallet size={18} />
+                    </div>
+                    <div className="stat-value" style={{ color: 'var(--danger-400)' }}>
+                        {formatCurrency(expenseTotal)}
                     </div>
                     <div className="stat-label">Expenses</div>
-                    <div className="stat-value" style={{ color: 'var(--danger-400)' }}>
-                        {currency}{expenseTotal.toFixed(2)}
-                    </div>
-                </div>
-
-                <div className="stat-card">
-                    <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--accent-400)' }}>
-                        <TrendingDown size={20} />
-                    </div>
-                    <div className="stat-label">Net Profit</div>
-                    <div className="stat-value" style={{ color: (stats.totalProfit - expenseTotal) >= 0 ? 'var(--accent-400)' : 'var(--danger-400)' }}>
-                        {currency}{(stats.totalProfit - expenseTotal).toFixed(2)}
-                    </div>
                 </div>
             </div>
 

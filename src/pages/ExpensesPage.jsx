@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     ShoppingCart, Truck, Zap, Home, MoreHorizontal,
-    Plus, Trash2, Wallet, ArrowDown
+    Plus, Trash2, Wallet
 } from 'lucide-react';
 import {
     addExpense, getTodayExpenses, deleteExpense, getSetting
@@ -162,9 +162,9 @@ export default function ExpensesPage() {
 
                 {expenses.length === 0 ? (
                     <div className="empty-state" style={{ padding: '30px 20px' }}>
-                        <Wallet size={40} />
+                        <Wallet size={44} />
                         <h3>No Expenses Today</h3>
-                        <p>Tap a category above to record an expense</p>
+                        <p>Tap a category above to record your first expense for the day.</p>
                     </div>
                 ) : (
                     expenses.map(expense => {

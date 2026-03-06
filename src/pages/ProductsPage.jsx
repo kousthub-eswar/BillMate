@@ -186,9 +186,14 @@ export default function ProductsPage() {
             {/* Product List */}
             {filtered.length === 0 ? (
                 <div className="empty-state">
-                    <Package size={48} />
-                    <h3>No Products</h3>
-                    <p>Add products to start billing</p>
+                    <Package size={52} />
+                    <h3>{query.trim() ? 'No Matching Products' : 'No Products Yet'}</h3>
+                    <p>{query.trim() ? `No products match "${query}"` : 'Tap the + button to add your first product and start billing.'}</p>
+                    {!query.trim() && (
+                        <button className="btn btn-primary" onClick={openAdd}>
+                            <Plus size={18} /> Add First Product
+                        </button>
+                    )}
                 </div>
             ) : (
                 filtered.map(product => (
