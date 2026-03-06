@@ -86,6 +86,8 @@ export async function getSaleById(id) {
 
 export async function getSales(filter = 'today') {
     let sales = await db.sales.orderBy('date').reverse().toArray();
+    // Exclude settlement records from general sales history
+    sales = sales.filter(s => s.payment_method !== 'Settle');
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -125,7 +127,8 @@ export async function getSales(filter = 'today') {
 export async function refundSale(saleId) {
     return await db.transaction('rw', db.sales, db.saleItems, db.products, async () => {
         const sale = await db.sales.get(saleId);
-        if (!sale || sale.refunded) return false;
+        if (!sale) throw new Error('Sale not found');
+        if (sale.refunded) throw new Error('Transaction is already refunded');
 
         await db.sales.update(saleId, { refunded: true });
 
@@ -184,7 +187,7 @@ export async function getTodayStats() {
 
     const allSales = await db.sales.toArray();
     const todaySales = allSales.filter(
-        s => new Date(s.date) >= startOfToday && !s.refunded
+        s => new Date(s.date) >= startOfToday && !s.refunded && s.payment_method !== 'Settle'
     );
 
     const totalRevenue = todaySales.reduce((sum, s) => sum + s.total, 0);

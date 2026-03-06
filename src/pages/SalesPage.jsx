@@ -3,6 +3,8 @@ import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
     ShoppingBag
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { getSales, getSaleById, refundSale, getSetting } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { getAllSettings } from '../database';
@@ -55,14 +57,14 @@ export default function SalesPage() {
     };
 
     const handleRefund = async (saleId) => {
-        const success = await refundSale(saleId);
-        if (success) {
+        try {
+            await refundSale(saleId);
             showToast('Sale refunded, stock restored');
             setShowRefundConfirm(null);
             setExpandedSale(null);
             loadSales();
-        } else {
-            showToast('Refund failed', 'error');
+        } catch (error) {
+            showToast(error.message || 'Refund failed', 'error');
         }
     };
 
@@ -92,13 +94,12 @@ export default function SalesPage() {
 
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Sales</h1>
+            <AppHeader title="Sales">
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                     <div>{sales.length} transactions</div>
                     <div style={{ color: 'var(--primary-300)', fontWeight: 600 }}>{formatCurrency(totalRevenue)}</div>
                 </div>
-            </div>
+            </AppHeader>
 
             {/* Filter Tabs */}
             <div className="filter-tabs">
@@ -211,25 +212,14 @@ export default function SalesPage() {
 
             {/* Refund Confirmation */}
             {showRefundConfirm && (
-                <div className="modal-overlay" onClick={() => setShowRefundConfirm(null)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-handle" />
-                        <div className="modal-title">Refund Transaction?</div>
-                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>
-                            This will mark sale <strong style={{ color: 'var(--text-primary)' }}>#{showRefundConfirm.id}</strong> as refunded
-                            and restore inventory stock.
-                        </p>
-                        <p style={{ textAlign: 'center', color: 'var(--danger-400)', fontSize: '1.1rem', fontWeight: 700, marginBottom: 20 }}>
-                            {currency}{showRefundConfirm.total.toFixed(2)}
-                        </p>
-                        <div className="confirm-actions">
-                            <button className="btn btn-secondary" onClick={() => setShowRefundConfirm(null)}>Cancel</button>
-                            <button className="btn btn-danger" onClick={() => handleRefund(showRefundConfirm.id)}>
-                                <RotateCcw size={16} /> Confirm Refund
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Refund Transaction?"
+                    message={`Are you sure you want to refund this transaction of ${formatCurrency(showRefundConfirm.total)}? This will restore stock for all items.`}
+                    confirmText="Refund"
+                    variant="danger"
+                    onConfirm={() => handleRefund(showRefundConfirm.id)}
+                    onCancel={() => setShowRefundConfirm(null)}
+                />
             )}
         </div>
     );

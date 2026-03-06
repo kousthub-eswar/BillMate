@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Search, Plus, Edit2, Trash2, Package, X,
     ChevronRight, Star, Minus, Scan
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
     getAllProducts, addProduct, updateProduct,
@@ -149,12 +151,11 @@ export default function ProductsPage() {
 
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Products</h1>
+            <AppHeader title="Products">
                 <button className="btn btn-primary btn-sm" onClick={openAdd} id="add-product-btn">
                     <Plus size={16} /> Add
                 </button>
-            </div>
+            </AppHeader>
 
             {/* Search */}
             <div className="search-bar">
@@ -409,23 +410,16 @@ export default function ProductsPage() {
 
             {/* Delete Confirmation */}
             {showDelete && (
-                <div className="modal-overlay" onClick={() => setShowDelete(null)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-handle" />
-                        <div className="modal-title">Delete Product?</div>
-                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>
-                            Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{showDelete.name}</strong>?
-                        </p>
-                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 20 }}>
-                            This action cannot be undone.
-                        </p>
-                        <div className="confirm-actions">
-                            <button className="btn btn-secondary" onClick={() => setShowDelete(null)}>Cancel</button>
-                            <button className="btn btn-danger" onClick={() => handleDelete(showDelete.id)}>Delete</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Delete Product?"
+                    message={`Are you sure you want to delete ${showDelete.name}? This action cannot be undone.`}
+                    confirmText="Delete"
+                    variant="danger"
+                    onConfirm={() => handleDelete(showDelete.id)}
+                    onCancel={() => setShowDelete(null)}
+                />
             )}
+
             {/* Barcode Scanner Modal */}
             {showScanner && (
                 <BarcodeScanner

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import {
     ArrowLeft, DollarSign, TrendingUp, TrendingDown,
     ShoppingCart, Trophy, AlertTriangle, Wallet,
-    Package, BarChart3
+    Package, BarChart3, Lock, Banknote, Smartphone
 } from 'lucide-react';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../components/Toast';
 import {
     getTodayStats, getTopSellingProducts, getLowStockProducts,
     getSetting, getTodayExpenseTotal, getSales
@@ -17,6 +19,8 @@ export default function DaySummaryPage({ onBack }) {
     const [currency, setCurrency] = useState('₹');
     const [loading, setLoading] = useState(true);
     const [todaySales, setTodaySales] = useState([]);
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+    const showToast = useToast();
 
     useEffect(() => {
         loadSummary();
@@ -60,6 +64,17 @@ export default function DaySummaryPage({ onBack }) {
             </div>
         );
     }
+
+    const cashReceived = todaySales.filter(s => s.payment_method === 'Cash').reduce((sum, s) => sum + s.total, 0);
+    const upiReceived = todaySales.filter(s => s.payment_method === 'UPI').reduce((sum, s) => sum + s.total, 0);
+
+    const handleCloseDay = async () => {
+        const { setSetting } = await import('../database');
+        await setSetting('last_closed_day', new Date().toISOString());
+        showToast('Day closed successfully. Summary saved.');
+        setShowCloseConfirm(false);
+        onBack();
+    };
 
     return (
         <div className="page-content">
@@ -165,6 +180,26 @@ export default function DaySummaryPage({ onBack }) {
                     <div className="stat-label">Total Transactions</div>
                     <div className="stat-value">{stats.transactionCount}</div>
                 </div>
+
+                <div className="stat-card">
+                    <div className="stat-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: 'var(--success-400)' }}>
+                        <Banknote size={20} />
+                    </div>
+                    <div className="stat-label">Cash Received</div>
+                    <div className="stat-value" style={{ color: 'var(--success-500)' }}>
+                        {currency}{cashReceived.toFixed(2)}
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--info-400)' }}>
+                        <Smartphone size={20} />
+                    </div>
+                    <div className="stat-label">UPI Received</div>
+                    <div className="stat-value" style={{ color: 'var(--info-500)' }}>
+                        {currency}{upiReceived.toFixed(2)}
+                    </div>
+                </div>
             </div>
 
             {/* Top Selling Product */}
@@ -213,7 +248,7 @@ export default function DaySummaryPage({ onBack }) {
             </div>
 
             {/* Low Stock Items */}
-            <div className="dashboard-section" style={{ marginBottom: 80 }}>
+            <div className="dashboard-section">
                 <div className="dashboard-section-header">
                     <h3>
                         <AlertTriangle size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--warning-500)' }} />
@@ -242,6 +277,29 @@ export default function DaySummaryPage({ onBack }) {
                     ))
                 )}
             </div>
+
+            {/* Close Day Button */}
+            <div style={{ padding: '0 0 24px 0', marginTop: 16 }}>
+                <button
+                    className="btn btn-primary btn-lg btn-block"
+                    onClick={() => setShowCloseConfirm(true)}
+                    style={{ background: 'var(--danger-500)', color: '#fff', border: 'none', gap: 8 }}
+                >
+                    <Lock size={20} /> Close Day
+                </button>
+            </div>
+
+            {/* Close Day Confirm */}
+            {showCloseConfirm && (
+                <ConfirmDialog
+                    title="Close Day?"
+                    message={`Are you sure you want to close the day? Total Revenue: ${currency}${stats.totalRevenue.toFixed(2)}, Cash: ${currency}${cashReceived.toFixed(2)}, UPI: ${currency}${upiReceived.toFixed(2)}`}
+                    confirmText="Yes, Close Day"
+                    variant="danger"
+                    onConfirm={handleCloseDay}
+                    onCancel={() => setShowCloseConfirm(false)}
+                />
+            )}
         </div>
     );
 }

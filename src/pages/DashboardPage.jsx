@@ -11,6 +11,7 @@ import {
     Undo2,
     BarChart3
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
 import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
 import { useToast } from '../components/Toast';
 
@@ -80,22 +81,25 @@ export default function DashboardPage({ onNavigate }) {
 
     return (
         <div className="page-content" style={{ position: 'relative' }}>
+            <AppHeader title="Dashboard" />
+
             {/* Greeting + Bell Row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
                 <div>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: 4 }}>
                         {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </div>
-                    <h1 style={{
-                        fontSize: '1.6rem',
+                    <h2 style={{
+                        fontSize: '1.4rem',
                         fontWeight: 800,
                         background: 'linear-gradient(135deg, var(--primary-300), var(--primary-500))',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
-                        letterSpacing: '-0.02em'
+                        letterSpacing: '-0.02em',
+                        margin: 0
                     }}>
                         {getGreeting()}! 👋
-                    </h1>
+                    </h2>
                 </div>
 
                 {/* Notification Bell */}

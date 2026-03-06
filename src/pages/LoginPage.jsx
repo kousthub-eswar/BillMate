@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { login, register } from '../backend/auth';
 import { initializeSettings } from '../database';
-import { Receipt, Phone, Lock, User } from 'lucide-react';
+import { Phone, Lock, User } from 'lucide-react';
+import Logo from '../components/Logo';
 
 export default function LoginPage({ onLogin }) {
     const [isRegister, setIsRegister] = useState(false);
@@ -45,9 +46,7 @@ export default function LoginPage({ onLogin }) {
     return (
         <div className="login-container">
             <div className="login-logo">
-                <div className="logo-icon" style={{ padding: 0, overflow: 'hidden' }}>
-                    <img src="/icons/icon-192.svg" alt="BillMate" width={72} height={72} style={{ borderRadius: '24px' }} />
-                </div>
+                <Logo size={72} iconSize={40} borderRadius={20} />
                 <h1>BillMate</h1>
                 <p>Simple billing for smart vendors</p>
             </div>

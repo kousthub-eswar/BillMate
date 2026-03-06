@@ -3,6 +3,7 @@ import {
     Users, UserPlus, Search, Phone,
     History
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
 import {
     getAllCustomers, addCustomer, updateCustomerBalance,
     searchCustomers, getCustomerHistory, getSetting
@@ -79,10 +80,7 @@ export default function CustomersPage() {
 
         try {
             // Negative amount to reduce balance
-            await updateCustomerBalance(showSettleModal.id, -amount);
-
-            // We should ideally record this settlement transaction 
-            // For now we just update balance
+            await updateCustomerBalance(showSettleModal.id, -amount, true);
 
             showToast('Payment settled');
             setShowSettleModal(null);
@@ -101,12 +99,11 @@ export default function CustomersPage() {
 
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Customers</h1>
+            <AppHeader title="Customers">
                 <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
                     <UserPlus size={16} /> Add
                 </button>
-            </div>
+            </AppHeader>
 
             {/* Search */}
             <div className="search-bar">
@@ -256,25 +253,31 @@ export default function CustomersPage() {
                             </div>
                         ) : (
                             <div className="history-list">
-                                {history.map(h => (
-                                    <div key={h.id} className="history-item">
-                                        <div>
-                                            <div style={{ fontWeight: 500 }}>
-                                                {h.refunded ? 'Refunded Sale' : 'Purchase'}
+                                {history.map(h => {
+                                    const isPayment = h.payment_method === 'Settle';
+                                    return (
+                                        <div key={h.id} className="history-item">
+                                            <div>
+                                                <div style={{ fontWeight: 600, color: isPayment ? 'var(--accent-400)' : 'var(--text-main)' }}>
+                                                    {isPayment ? 'Payment Received' : (h.refunded ? 'Refunded Sale' : 'Purchase')}
+                                                </div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                    {new Date(h.date).toLocaleDateString('en-IN', {
+                                                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                                                    })}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                                {new Date(h.date).toLocaleDateString()}
+                                            <div style={{
+                                                fontWeight: 700,
+                                                color: isPayment ? 'var(--accent-400)' : (h.refunded ? 'var(--text-muted)' : 'var(--danger-400)'),
+                                                textDecoration: h.refunded ? 'line-through' : 'none',
+                                                fontSize: '1.1rem'
+                                            }}>
+                                                {isPayment ? '+' : '-'}{currency}{isPayment ? h.settle_amount.toFixed(2) : h.total.toFixed(2)}
                                             </div>
                                         </div>
-                                        <div style={{
-                                            fontWeight: 600,
-                                            color: h.refunded ? 'var(--text-muted)' : 'var(--danger-400)',
-                                            textDecoration: h.refunded ? 'line-through' : 'none'
-                                        }}>
-                                            -{currency}{h.total.toFixed(2)}
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

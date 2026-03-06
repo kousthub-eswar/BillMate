@@ -29,6 +29,14 @@ export async function addProduct(product) {
 }
 
 export async function updateProduct(id, updates) {
+    if (updates.name) {
+        const existing = await db.products
+            .filter(p => p.name.toLowerCase().trim() === updates.name.toLowerCase().trim() && p.id !== id)
+            .first();
+        if (existing) {
+            throw new Error(`Product "${updates.name}" already exists`);
+        }
+    }
     return await db.products.update(id, updates);
 }
 
@@ -62,7 +70,10 @@ export async function getLowStockProducts(threshold) {
 export async function adjustStock(id, adjustment) {
     const product = await db.products.get(id);
     if (product) {
-        const newQty = Math.max(0, product.stock_quantity + adjustment);
+        if (product.stock_quantity + adjustment < 0) {
+            throw new Error('Stock cannot go below zero');
+        }
+        const newQty = product.stock_quantity + adjustment;
         await db.products.update(id, { stock_quantity: newQty });
         return newQty;
     }

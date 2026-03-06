@@ -3,6 +3,8 @@ import {
     ShoppingCart, Truck, Zap, Home, MoreHorizontal,
     Plus, Trash2, Wallet
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import {
     addExpense, getTodayExpenses, deleteExpense, getSetting
 } from '../database';
@@ -84,15 +86,11 @@ export default function ExpensesPage() {
 
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Expenses</h1>
-                <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--danger-400)' }}>
-                        {currency}{todayTotal.toFixed(2)}
-                    </div>
+            <AppHeader title="Expenses">
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--danger-400)' }}>
+                    {currency}{todayTotal.toFixed(2)}
                 </div>
-            </div>
+            </AppHeader>
 
             {/* Quick Expense Type Buttons */}
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -200,20 +198,14 @@ export default function ExpensesPage() {
 
             {/* Delete Confirmation */}
             {showDeleteConfirm && (
-                <div className="modal-overlay" onClick={() => setShowDeleteConfirm(null)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-handle" />
-                        <div className="modal-title">Delete Expense?</div>
-                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>
-                            Remove <strong style={{ color: 'var(--text-primary)' }}>{showDeleteConfirm.type}</strong> expense
-                            of <strong style={{ color: 'var(--danger-400)' }}>{currency}{showDeleteConfirm.amount.toFixed(2)}</strong>?
-                        </p>
-                        <div className="confirm-actions" style={{ marginTop: 20 }}>
-                            <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(null)}>Cancel</button>
-                            <button className="btn btn-danger" onClick={() => handleDelete(showDeleteConfirm.id)}>Delete</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Delete Expense?"
+                    message={`Are you sure you want to delete this ${showDeleteConfirm.type} expense of ${currency}${showDeleteConfirm.amount.toFixed(2)}?`}
+                    confirmText="Delete"
+                    variant="danger"
+                    onConfirm={() => handleDelete(showDeleteConfirm.id)}
+                    onCancel={() => setShowDeleteConfirm(null)}
+                />
             )}
         </div>
     );

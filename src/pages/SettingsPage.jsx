@@ -2,15 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Store, DollarSign, AlertTriangle, MessageSquare,
     Download, Upload, LogOut, ChevronRight, FileText, Smartphone,
-    Sun, Moon
+    Sun, Moon, ShieldAlert, ShieldCheck, RotateCcw
 } from 'lucide-react';
-import { getAllSettings, setSetting } from '../database';
+import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { getAllSettings, setSetting, DEFAULT_SETTINGS } from '../database';
 import { exportAllData, importAllData, logout } from '../backend';
 import { useToast } from '../components/Toast';
 
 export default function SettingsPage({ onLogout }) {
     const [settings, setSettings] = useState({});
     const [showEditModal, setShowEditModal] = useState(null);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [editValue, setEditValue] = useState('');
     const fileInputRef = useRef(null);
     const showToast = useToast();
@@ -71,6 +74,8 @@ export default function SettingsPage({ onLogout }) {
     const handleExport = async () => {
         try {
             await exportAllData();
+            await setSetting('last_backup', new Date().toISOString());
+            loadSettings();
             showToast('Data exported');
         } catch (_err) {
             showToast('Export failed', 'error');
@@ -83,14 +88,19 @@ export default function SettingsPage({ onLogout }) {
 
         const reader = new FileReader();
         reader.onload = async (event) => {
-            const result = await importAllData(event.target.result);
-            if (result.success) {
-                showToast('Data imported successfully');
-                loadSettings();
-            } else {
-                showToast(result.message, 'error');
+            try {
+                const result = await importAllData(event.target.result);
+                if (result.success) {
+                    showToast('Data imported successfully');
+                    loadSettings();
+                } else {
+                    showToast(result.message || 'Import failed. File may be corrupted.', 'error');
+                }
+            } catch (e) {
+                showToast('Invalid backup file or network error', 'error');
             }
         };
+        reader.onerror = () => showToast('Failed to read backup file', 'error');
         reader.readAsText(file);
         e.target.value = '';
     };
@@ -98,6 +108,15 @@ export default function SettingsPage({ onLogout }) {
     const handleLogout = () => {
         logout();
         onLogout();
+    };
+
+    const handleResetSettings = async () => {
+        for (const key in DEFAULT_SETTINGS) {
+            await setSetting(key, DEFAULT_SETTINGS[key]);
+        }
+        await loadSettings();
+        showToast('Settings restored to default');
+        setShowResetConfirm(false);
     };
 
     const getSettingLabel = (key) => {
@@ -131,11 +150,20 @@ export default function SettingsPage({ onLogout }) {
         return <Icon size={18} />;
     };
 
+    const getLastBackupText = () => {
+        if (!settings.last_backup) return 'Never';
+        const days = Math.floor((new Date() - new Date(settings.last_backup)) / (1000 * 60 * 60 * 24));
+        if (days === 0) return 'Today';
+        if (days === 1) return 'Yesterday';
+        return `${days} days ago`;
+    };
+
+    const backupDaysAgo = settings.last_backup ? Math.floor((new Date() - new Date(settings.last_backup)) / (1000 * 60 * 60 * 24)) : Infinity;
+    const needsBackup = backupDaysAgo >= 7;
+
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Settings</h1>
-            </div>
+            <AppHeader title="Settings" />
 
             {/* Appearance */}
             <div className="settings-group">
@@ -248,13 +276,26 @@ export default function SettingsPage({ onLogout }) {
             <div className="settings-group">
                 <div className="settings-group-title">Data Management</div>
 
+                {needsBackup && (
+                    <div style={{ background: 'rgba(245, 166, 35, 0.1)', padding: 12, borderRadius: 12, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <AlertTriangle size={20} style={{ color: 'var(--warning-500)', flexShrink: 0 }} />
+                        <div>
+                            <div style={{ fontWeight: 600, color: 'var(--warning-500)', fontSize: '0.85rem' }}>You have not backed up your data recently.</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 4 }}>Tap Export Backup to save your shop data.</div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="settings-item" onClick={handleExport}>
                     <div className="settings-item-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--accent-400)' }}>
                         <Download size={18} />
                     </div>
                     <div className="settings-item-info">
-                        <div className="settings-item-label">Export Data</div>
-                        <div className="settings-item-desc">Download all data as JSON backup</div>
+                        <div className="settings-item-label">Export Backup</div>
+                        <div className="settings-item-desc">
+                            Last Backup: {getLastBackupText()}
+                            {needsBackup ? ' ⚠️' : ' ✅'}
+                        </div>
                     </div>
                     <ChevronRight size={18} color="var(--text-muted)" />
                 </div>
@@ -266,6 +307,17 @@ export default function SettingsPage({ onLogout }) {
                     <div className="settings-item-info">
                         <div className="settings-item-label">Import Data</div>
                         <div className="settings-item-desc">Restore from JSON backup</div>
+                    </div>
+                    <ChevronRight size={18} color="var(--text-muted)" />
+                </div>
+
+                <div className="settings-item" onClick={() => setShowResetConfirm(true)}>
+                    <div className="settings-item-icon" style={{ background: 'rgba(148, 163, 184, 0.15)', color: 'var(--text-secondary)' }}>
+                        <RotateCcw size={18} />
+                    </div>
+                    <div className="settings-item-info">
+                        <div className="settings-item-label">Reset Settings</div>
+                        <div className="settings-item-desc">Restore default preferences</div>
                     </div>
                     <ChevronRight size={18} color="var(--text-muted)" />
                 </div>
@@ -328,16 +380,17 @@ export default function SettingsPage({ onLogout }) {
             {/* App Info */}
             <div style={{
                 textAlign: 'center',
-                padding: '20px 0 8px',
+                padding: '20px 0 30px',
                 color: 'var(--text-muted)',
                 fontSize: '0.75rem'
             }}>
-                <div style={{ fontWeight: 700, color: 'var(--primary-400)', fontSize: '0.85rem', marginBottom: 4 }}>
-                    BillMate v1.0
+                <div style={{ fontWeight: 700, color: 'var(--primary-400)', fontSize: '1rem', marginBottom: 4 }}>
+                    BillMate POS
                 </div>
-                <div>Smart POS for Smart Shopkeepers</div>
+                <div style={{ fontSize: '0.85rem' }}>Version 1.0</div>
+                <div style={{ fontSize: '0.85rem', marginTop: 2 }}>Offline Retail Billing System</div>
                 {isInstalled && (
-                    <div style={{ marginTop: 4, color: 'var(--accent-400)' }}>✓ Installed as App</div>
+                    <div style={{ marginTop: 8, color: 'var(--accent-400)' }}>✓ Installed as App</div>
                 )}
             </div>
 
@@ -386,6 +439,17 @@ export default function SettingsPage({ onLogout }) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showResetConfirm && (
+                <ConfirmDialog
+                    title="Reset Settings?"
+                    message="Are you sure you want to restore all settings to their defaults? Your shop data (products, sales) will not be deleted."
+                    confirmText="Reset"
+                    variant="danger"
+                    onConfirm={handleResetSettings}
+                    onCancel={() => setShowResetConfirm(false)}
+                />
             )}
         </div>
     );

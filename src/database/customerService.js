@@ -16,15 +16,34 @@ export async function getCustomerById(id) {
     return await db.customers.get(id);
 }
 
-export async function updateCustomerBalance(id, amount) {
+export async function updateCustomerBalance(id, amount, isSettlement = false) {
     // Amount can be positive (credit sale) or negative (settlement)
     const customer = await db.customers.get(id);
-    if (customer) {
-        const newBalance = (customer.balance || 0) + amount;
+    if (!customer) return null;
+
+    const newBalance = (customer.balance || 0) + amount;
+
+    await db.transaction('rw', db.customers, db.sales, async () => {
         await db.customers.update(id, { balance: newBalance });
-        return newBalance;
-    }
-    return null;
+
+        if (isSettlement) {
+            // Record the payment
+            await db.sales.add({
+                date: new Date().toISOString(),
+                total: 0,
+                subtotal: 0,
+                discount_amount: 0,
+                profit: 0,
+                payment_method: 'Settle',
+                refunded: false,
+                customer_id: id,
+                item_count: 0,
+                settle_amount: Math.abs(amount)
+            });
+        }
+    });
+
+    return newBalance;
 }
 
 export async function getCustomerHistory(customerId) {

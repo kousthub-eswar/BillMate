@@ -7,6 +7,7 @@ import { initializeSettings } from './database';
 import { isAuthenticated } from './backend/auth';
 import { ToastProvider } from './components/Toast';
 import OnboardingWizard from './components/OnboardingWizard';
+import SplashScreen from './components/SplashScreen';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BillingPage from './pages/BillingPage';
@@ -21,6 +22,7 @@ function App() {
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [activePage, setActivePage] = useState('billing');
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   // Apply saved theme on app mount & initialize settings if already logged in
   useEffect(() => {
@@ -46,10 +48,10 @@ function App() {
     setActivePage('billing');
   };
 
-
   if (!loggedIn) {
     return (
       <ToastProvider>
+        {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
         <LoginPage onLogin={handleLogin} />
       </ToastProvider>
     );
@@ -83,6 +85,7 @@ function App() {
   if (showOnboarding) {
     return (
       <ToastProvider>
+        {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
         <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
       </ToastProvider>
     );
@@ -90,6 +93,7 @@ function App() {
 
   return (
     <ToastProvider>
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <div className="app-container">
         {renderPage()}
 

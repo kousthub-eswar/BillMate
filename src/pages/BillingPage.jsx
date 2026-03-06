@@ -5,6 +5,7 @@ import {
     X, MessageCircle, Package, AlertTriangle, Users, Scan,
     Percent, Tag
 } from 'lucide-react';
+import AppHeader from '../components/AppHeader';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
     searchProducts, getFrequentProducts, createSale,
@@ -44,6 +45,9 @@ export default function BillingPage() {
     const [categories, setCategories] = useState([]);
     const [quickAddLoading, setQuickAddLoading] = useState(false);
 
+    // Quantity Keypad state
+    const [qtyPadItem, setQtyPadItem] = useState(null);
+    const [qtyPadValue, setQtyPadValue] = useState('');
     const loadFrequent = async () => {
         const products = await getFrequentProducts();
         setFrequentProducts(products);
@@ -215,14 +219,13 @@ export default function BillingPage() {
 
     return (
         <div className="page-content">
-            <div className="page-header">
-                <h1>Billing</h1>
+            <AppHeader title="Billing">
                 {cart.length > 0 && (
-                    <button className="btn btn-ghost" onClick={clearCart} style={{ color: 'var(--danger-400)', fontSize: '0.8rem' }}>
+                    <button className="btn btn-primary btn-sm" onClick={clearCart} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-400)', border: 'none', padding: '6px 12px' }}>
                         Clear Cart
                     </button>
                 )}
-            </div>
+            </AppHeader>
 
             {/* Search */}
             <div className="search-bar">
@@ -335,14 +338,27 @@ export default function BillingPage() {
                     <div className="quick-grid">
                         {frequentProducts.map(product => {
                             const isOutOfStock = product.stock_quantity <= 0;
+                            const isLowStock = product.stock_quantity > 0 && product.stock_quantity <= lowStockThreshold;
                             return (
                                 <div
                                     key={product.id}
                                     className={`quick-item ${isOutOfStock ? 'out-of-stock' : ''}`}
                                     onClick={() => !isOutOfStock && addToCart(product)}
+                                    style={{ position: 'relative' }}
                                 >
                                     <div className="quick-name">{product.name}</div>
                                     <div className="quick-price">{formatCurrency(product.selling_price)}</div>
+
+                                    {isOutOfStock && (
+                                        <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--danger-500)', color: 'white', fontSize: '0.65rem', padding: '2px 6px', borderRadius: 4, fontWeight: 700, pointerEvents: 'none' }}>
+                                            Out of stock
+                                        </div>
+                                    )}
+                                    {isLowStock && (
+                                        <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--warning-500)', color: 'white', fontSize: '0.65rem', padding: '2px 6px', borderRadius: 4, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3, pointerEvents: 'none' }}>
+                                            <AlertTriangle size={10} /> {product.stock_quantity} left
+                                        </div>
+                                    )}
                                 </div>
                             )
                         })}
@@ -371,7 +387,13 @@ export default function BillingPage() {
                                 <button className="qty-btn" onClick={() => updateQuantity(item.id, -1)}>
                                     <Minus size={14} />
                                 </button>
-                                <span className="qty-value">{item.quantity}</span>
+                                <div
+                                    className="qty-value"
+                                    style={{ cursor: 'pointer', padding: '0 8px', minWidth: 28, textAlign: 'center' }}
+                                    onClick={() => { setQtyPadItem(item); setQtyPadValue(item.quantity.toString()); }}
+                                >
+                                    {item.quantity}
+                                </div>
                                 <button className="qty-btn" onClick={() => updateQuantity(item.id, 1)}>
                                     <Plus size={14} />
                                 </button>
@@ -607,6 +629,9 @@ export default function BillingPage() {
                                 </>
                             )}
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{cartCount} items</div>
+                            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-color)', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                Powered by BillMate
+                            </div>
                         </div>
 
                         {/* Customer Selection */}
