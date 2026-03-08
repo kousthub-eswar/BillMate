@@ -125,19 +125,30 @@ export async function getSales(filter = 'today') {
 }
 
 export async function refundSale(saleId) {
-    return await db.transaction('rw', db.sales, db.saleItems, db.products, async () => {
+    return await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
         const sale = await db.sales.get(saleId);
         if (!sale) throw new Error('Sale not found');
         if (sale.refunded) throw new Error('Transaction is already refunded');
 
         await db.sales.update(saleId, { refunded: true });
 
+        // Restore stock
         const items = await db.saleItems.where('sale_id').equals(saleId).toArray();
         for (const item of items) {
             const product = await db.products.get(item.product_id);
             if (product) {
                 await db.products.update(item.product_id, {
                     stock_quantity: product.stock_quantity + item.quantity
+                });
+            }
+        }
+
+        // If it was a Credit sale, reverse customer balance
+        if (sale.payment_method === 'Credit' && sale.customer_id) {
+            const customer = await db.customers.get(sale.customer_id);
+            if (customer) {
+                await db.customers.update(sale.customer_id, {
+                    balance: Math.max(0, (customer.balance || 0) - sale.total)
                 });
             }
         }
