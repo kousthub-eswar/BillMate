@@ -35,3 +35,21 @@ export {
     getCustomerHistory,
     searchCustomers
 } from './customerService';
+export {
+    addSupplier,
+    getAllSuppliers,
+    getSupplierById,
+    updateSupplier,
+    deleteSupplier,
+    searchSuppliers,
+    getSupplierStats
+} from './supplierService';
+export {
+    createPurchase,
+    getPurchases,
+    getPurchaseById,
+    getPurchasesBySupplier,
+    deletePurchase,
+    quickRestock,
+    getPurchaseStats
+} from './purchaseService';

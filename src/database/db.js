@@ -26,6 +26,18 @@ db.version(3).stores({
     customers: '++id, name, phone'
 });
 
+db.version(4).stores({
+    products: '++id, name, category, frequently_used, barcode',
+    sales: '++id, date, payment_method, refunded, customer_id',
+    saleItems: '++id, sale_id, product_id',
+    settings: 'key',
+    expenses: '++id, type, date',
+    customers: '++id, name, phone',
+    suppliers: '++id, name, phone',
+    purchases: '++id, supplier_id, date',
+    purchaseItems: '++id, purchase_id, product_id'
+});
+
 // Default settings
 const DEFAULT_SETTINGS = {
     shop_name: 'My Shop',

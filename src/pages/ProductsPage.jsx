@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Search, Plus, Edit2, Trash2, Package, X,
-    ChevronRight, Star, Minus, Scan
+    ChevronRight, Star, Minus, Scan, PackagePlus
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
     getAllProducts, addProduct, updateProduct,
-    deleteProduct, adjustStock, getCategories, getSetting
+    deleteProduct, adjustStock, getCategories, getSetting,
+    quickRestock, getAllSuppliers
 } from '../database';
 import { useToast } from '../components/Toast';
 
@@ -36,12 +37,22 @@ export default function ProductsPage() {
     const [stockProduct, setStockProduct] = useState(null);
     const [stockAdjust, setStockAdjust] = useState(0);
     const [showDelete, setShowDelete] = useState(null);
+    const [showRestock, setShowRestock] = useState(null);
+    const [restockQty, setRestockQty] = useState('');
+    const [restockPrice, setRestockPrice] = useState('');
+    const [restockSupplier, setRestockSupplier] = useState('');
+    const [suppliers, setSuppliers] = useState([]);
     const [currency, setCurrency] = useState('₹');
     const showToast = useToast();
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
+    };
+
+    const loadSuppliers = async () => {
+        const sups = await getAllSuppliers();
+        setSuppliers(sups);
     };
 
     const loadProducts = async () => {
@@ -70,6 +81,7 @@ export default function ProductsPage() {
     useEffect(() => {
         loadProducts();
         loadCurrency();
+        loadSuppliers();
     }, []);
 
     useEffect(() => {
@@ -147,6 +159,39 @@ export default function ProductsPage() {
         setShowStockModal(false);
         showToast(`Stock ${stockAdjust > 0 ? 'added' : 'reduced'}`);
         loadProducts();
+    };
+
+    const openRestock = (product) => {
+        setShowRestock(product);
+        setRestockQty('');
+        setRestockPrice(product.cost_price ? product.cost_price.toString() : '');
+        setRestockSupplier('');
+    };
+
+    const handleRestock = async () => {
+        const qty = parseInt(restockQty);
+        const price = parseFloat(restockPrice);
+        if (!qty || qty <= 0) {
+            showToast('Enter a valid quantity', 'error');
+            return;
+        }
+        if (!price || price < 0) {
+            showToast('Enter a valid price', 'error');
+            return;
+        }
+        try {
+            await quickRestock(
+                showRestock.id,
+                qty,
+                price,
+                restockSupplier ? parseInt(restockSupplier) : null
+            );
+            showToast(`Restocked ${qty} units of ${showRestock.name}`);
+            setShowRestock(null);
+            loadProducts();
+        } catch (err) {
+            showToast(err.message || 'Restock failed', 'error');
+        }
     };
 
     return (
@@ -338,6 +383,13 @@ export default function ProductsPage() {
                                         Adjust Stock
                                     </button>
                                     <button
+                                        className="btn btn-success"
+                                        onClick={() => { setShowForm(false); openRestock(editingProduct); }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <PackagePlus size={14} /> Restock
+                                    </button>
+                                    <button
                                         className="btn btn-danger"
                                         onClick={() => { setShowForm(false); setShowDelete(editingProduct); }}
                                         style={{ width: 48 }}
@@ -430,6 +482,97 @@ export default function ProductsPage() {
                     }}
                     onClose={() => setShowScanner(false)}
                 />
+            )}
+
+            {/* Quick Restock Modal */}
+            {showRestock && (
+                <div className="modal-overlay" onClick={() => setShowRestock(null)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-handle" />
+                        <div className="modal-title">
+                            <PackagePlus size={20} style={{ verticalAlign: 'middle', marginRight: 8 }} />
+                            Restock Product
+                        </div>
+
+                        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>{showRestock.name}</div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                                Current stock: {showRestock.stock_quantity} | Cost: {currency}{showRestock.cost_price}
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div className="form-group">
+                                <label className="form-label">Quantity *</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    placeholder="0"
+                                    value={restockQty}
+                                    onChange={(e) => setRestockQty(e.target.value)}
+                                    autoFocus
+                                    min="1"
+                                    id="restock-qty"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Purchase Price ({currency})</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={restockPrice}
+                                    onChange={(e) => setRestockPrice(e.target.value)}
+                                    min="0"
+                                    step="0.01"
+                                    id="restock-price"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Supplier (Optional)</label>
+                            <select
+                                className="form-input"
+                                value={restockSupplier}
+                                onChange={(e) => setRestockSupplier(e.target.value)}
+                                id="restock-supplier"
+                            >
+                                <option value="">No supplier</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {restockQty && restockPrice && (
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '12px 14px',
+                                background: 'rgba(16, 185, 129, 0.08)',
+                                border: '1px solid rgba(16, 185, 129, 0.2)',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: 16
+                            }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>Total Cost</span>
+                                <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-400)' }}>
+                                    {currency}{(parseInt(restockQty || 0) * parseFloat(restockPrice || 0)).toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+
+                        <button
+                            className="btn btn-success btn-block"
+                            onClick={handleRestock}
+                            disabled={!restockQty || !restockPrice}
+                            style={{ opacity: (!restockQty || !restockPrice) ? 0.5 : 1 }}
+                            id="confirm-restock"
+                        >
+                            <PackagePlus size={18} /> Restock Now
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

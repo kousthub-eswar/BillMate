@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getTodayStats, getLowStockProducts, getTopSellingProducts, getSetting, getTodayExpenseTotal, undoLastSale } from '../database';
+import {
+    getTodayStats, getLowStockProducts, getTopSellingProducts,
+    getSetting, getTodayExpenseTotal, undoLastSale,
+    getAllProducts, db
+} from '../database';
 import {
     DollarSign,
     ShoppingCart,
@@ -7,9 +11,12 @@ import {
     Trophy,
     Wallet,
     TrendingDown,
+    TrendingUp,
     Bell,
     Undo2,
-    BarChart3
+    BarChart3,
+    Activity,
+    PackageX
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
@@ -23,6 +30,9 @@ export default function DashboardPage({ onNavigate }) {
     const [expenseTotal, setExpenseTotal] = useState(0);
     const [showAlerts, setShowAlerts] = useState(false);
     const [showUndoConfirm, setShowUndoConfirm] = useState(false);
+    const [weeklyRevenue, setWeeklyRevenue] = useState([]);
+    const [slowMoving, setSlowMoving] = useState([]);
+    const [profitReport, setProfitReport] = useState([]);
     const alertCount = useAlertCount();
     const showToast = useToast();
 
@@ -45,6 +55,79 @@ export default function DashboardPage({ onNavigate }) {
 
         setLowStock(lowStockData);
         setTopProducts(topData);
+
+        // Load advanced analytics
+        await loadWeeklyRevenue();
+        await loadSlowMoving(parseInt(thresh));
+        await loadProfitReport();
+    };
+
+    const loadWeeklyRevenue = async () => {
+        const allSales = await db.sales.toArray();
+        const nonRefunded = allSales.filter(s => !s.refunded && s.payment_method !== 'Settle');
+        const now = new Date();
+        const days = [];
+
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+            const nextDate = new Date(date);
+            nextDate.setDate(nextDate.getDate() + 1);
+
+            const daySales = nonRefunded.filter(s => {
+                const d = new Date(s.date);
+                return d >= date && d < nextDate;
+            });
+
+            const revenue = daySales.reduce((sum, s) => sum + s.total, 0);
+            days.push({
+                label: date.toLocaleDateString('en-IN', { weekday: 'short' }),
+                date: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                revenue
+            });
+        }
+        setWeeklyRevenue(days);
+    };
+
+    const loadSlowMoving = async (threshold) => {
+        const products = await getAllProducts();
+        const allSales = await db.sales.toArray();
+        const nonRefunded = allSales.filter(s => !s.refunded);
+
+        const now = new Date();
+        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+        const recentSaleIds = new Set(
+            nonRefunded.filter(s => new Date(s.date) >= weekAgo).map(s => s.id)
+        );
+
+        const saleItems = await db.saleItems.toArray();
+        const recentSaleItems = saleItems.filter(item => recentSaleIds.has(item.sale_id));
+
+        // Find products with stock > threshold but no recent sales
+        const recentlySoldProductIds = new Set(recentSaleItems.map(i => i.product_id));
+
+        const slow = products.filter(p =>
+            p.stock_quantity > (threshold || 5) &&
+            !recentlySoldProductIds.has(p.id)
+        );
+
+        setSlowMoving(slow.slice(0, 5));
+    };
+
+    const loadProfitReport = async () => {
+        const products = await getAllProducts();
+        const profitable = products
+            .filter(p => p.selling_price > 0 && p.cost_price > 0)
+            .map(p => ({
+                name: p.name,
+                sellingPrice: p.selling_price,
+                costPrice: p.cost_price,
+                margin: p.selling_price - p.cost_price,
+                marginPercent: ((p.selling_price - p.cost_price) / p.selling_price * 100)
+            }))
+            .sort((a, b) => b.margin - a.margin)
+            .slice(0, 5);
+
+        setProfitReport(profitable);
     };
 
     useEffect(() => {
@@ -78,6 +161,9 @@ export default function DashboardPage({ onNavigate }) {
         if (hour < 17) return 'Good Afternoon';
         return 'Good Evening';
     };
+
+    // Calculate max revenue for bar chart scaling
+    const maxRevenue = Math.max(...weeklyRevenue.map(d => d.revenue), 1);
 
     return (
         <div className="page-content" style={{ position: 'relative' }}>
@@ -223,6 +309,72 @@ export default function DashboardPage({ onNavigate }) {
                 </div>
             </div>
 
+            {/* Weekly Revenue Trend */}
+            <div className="dashboard-section">
+                <div className="dashboard-section-header">
+                    <h3>
+                        <Activity size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--info-400)' }} />
+                        Weekly Revenue
+                    </h3>
+                </div>
+                <div style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '16px 14px 12px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120, marginBottom: 8 }}>
+                        {weeklyRevenue.map((day, i) => {
+                            const height = maxRevenue > 0 ? Math.max((day.revenue / maxRevenue) * 100, 4) : 4;
+                            const isToday = i === weeklyRevenue.length - 1;
+                            return (
+                                <div key={i} style={{
+                                    flex: 1,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: 4
+                                }}>
+                                    {day.revenue > 0 && (
+                                        <div style={{
+                                            fontSize: '0.58rem',
+                                            fontWeight: 700,
+                                            color: isToday ? 'var(--primary-400)' : 'var(--text-muted)',
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            {currency}{day.revenue >= 1000 ? `${(day.revenue / 1000).toFixed(1)}k` : day.revenue}
+                                        </div>
+                                    )}
+                                    <div style={{
+                                        width: '100%',
+                                        height: `${height}%`,
+                                        borderRadius: '6px 6px 2px 2px',
+                                        background: isToday
+                                            ? 'linear-gradient(to top, var(--primary-600), var(--primary-400))'
+                                            : 'linear-gradient(to top, rgba(56, 189, 248, 0.25), rgba(56, 189, 248, 0.45))',
+                                        transition: 'height 0.4s ease',
+                                        minHeight: 4
+                                    }} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                        {weeklyRevenue.map((day, i) => (
+                            <div key={i} style={{
+                                flex: 1,
+                                textAlign: 'center',
+                                fontSize: '0.62rem',
+                                fontWeight: 600,
+                                color: i === weeklyRevenue.length - 1 ? 'var(--primary-400)' : 'var(--text-muted)'
+                            }}>
+                                {day.label}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
             {/* Low Stock Alerts */}
             <div className="dashboard-section">
                 <div className="dashboard-section-header">
@@ -270,6 +422,75 @@ export default function DashboardPage({ onNavigate }) {
                     ))
                 )}
             </div>
+
+            {/* Slow Moving Products */}
+            {slowMoving.length > 0 && (
+                <div className="dashboard-section">
+                    <div className="dashboard-section-header">
+                        <h3>
+                            <PackageX size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--warning-500)' }} />
+                            Slow Moving
+                        </h3>
+                        <span className="stock-badge low" style={{
+                            background: 'rgba(251, 146, 60, 0.12)',
+                            color: 'var(--warning-400)'
+                        }}>⚠ {slowMoving.length} items</span>
+                    </div>
+                    {slowMoving.map(item => (
+                        <div key={item.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            background: 'var(--bg-card)',
+                            border: '1px solid rgba(251, 146, 60, 0.15)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 8
+                        }}>
+                            <div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{item.name}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--warning-400)', marginTop: 2 }}>
+                                    ⚠ No sales in 7 days
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                                    {item.stock_quantity} in stock
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Profit Margin Report */}
+            {profitReport.length > 0 && (
+                <div className="dashboard-section">
+                    <div className="dashboard-section-header">
+                        <h3>
+                            <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
+                            Top Profit Margins
+                        </h3>
+                    </div>
+                    {profitReport.map((item, i) => (
+                        <div key={item.name} className="top-product-item">
+                            <div className="top-product-rank" style={{
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: 'var(--accent-400)'
+                            }}>{i + 1}</div>
+                            <div className="top-product-info">
+                                <div className="top-product-name">{item.name}</div>
+                                <div className="top-product-qty">
+                                    Margin: {formatCurrency(item.margin)} ({item.marginPercent.toFixed(0)}%)
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-400)' }}>
+                                {formatCurrency(item.sellingPrice)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Alerts Panel */}
             <AlertsPanel

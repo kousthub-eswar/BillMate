@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, ShoppingCart, Package,
-  Clock, Settings, Wallet, Users
+  Clock, Settings, Wallet, Users, Truck, ClipboardList
 } from 'lucide-react';
 import { initializeSettings } from './database';
 import { isAuthenticated } from './backend/auth';
@@ -15,6 +15,8 @@ import ProductsPage from './pages/ProductsPage';
 import SalesPage from './pages/SalesPage';
 import ExpensesPage from './pages/ExpensesPage';
 import CustomersPage from './pages/CustomersPage';
+import SuppliersPage from './pages/SuppliersPage';
+import PurchasesPage from './pages/PurchasesPage';
 import SettingsPage from './pages/SettingsPage';
 import DaySummaryPage from './pages/DaySummaryPage';
 
@@ -63,6 +65,8 @@ function App() {
     { key: 'sales', label: 'Sales', icon: Clock },
     { key: 'billing', label: 'Bill', icon: ShoppingCart, isBilling: true },
     { key: 'customers', label: 'Khata', icon: Users },
+    { key: 'suppliers', label: 'Suppliers', icon: Truck },
+    { key: 'purchases', label: 'Purchases', icon: ClipboardList },
     { key: 'expenses', label: 'Expenses', icon: Wallet },
     { key: 'settings', label: 'Settings', icon: Settings }
   ];
@@ -76,6 +80,8 @@ function App() {
       case 'sales': return <SalesPage />;
       case 'expenses': return <ExpensesPage />;
       case 'customers': return <CustomersPage />;
+      case 'suppliers': return <SuppliersPage />;
+      case 'purchases': return <PurchasesPage />;
       case 'settings': return <SettingsPage onLogout={handleLogout} />;
       default: return <BillingPage />;
     }
