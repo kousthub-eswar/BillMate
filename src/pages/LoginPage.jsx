@@ -1,139 +1,254 @@
 import { useState } from 'react';
-import { login, register } from '../backend/auth';
-import { initializeSettings } from '../database';
-import { Phone, Lock, User } from 'lucide-react';
-import Logo from '../components/Logo';
+import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, CheckCircle, RotateCcw } from 'lucide-react';
+import { signIn, signUp } from '../backend/auth';
+import { useToast } from '../components/Toast';
 
 export default function LoginPage({ onLogin }) {
-    const [isRegister, setIsRegister] = useState(false);
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
-    const [pin, setPin] = useState('');
-    const [error, setError] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [confirmationSent, setConfirmationSent] = useState(false);
+    const showToast = useToast();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
-
-        try {
-            let result;
-            if (isRegister) {
-                if (!name.trim()) {
-                    setError('Name is required');
-                    setLoading(false);
-                    return;
-                }
-                result = register(name, phone, pin);
-            } else {
-                result = login(phone, pin);
-            }
-
-            if (result.success) {
-                await initializeSettings();
-                onLogin(result.user);
-            } else {
-                setError(result.error);
-            }
-        } catch (_err) {
-            setError('Something went wrong');
+        if (!email.trim() || !password.trim()) {
+            showToast('Please enter email and password', 'error');
+            return;
         }
-
+        if (password.length < 6) {
+            showToast('Password must be at least 6 characters', 'error');
+            return;
+        }
+        setLoading(true);
+        try {
+            if (isSignUp) {
+                const result = await signUp(email.trim(), password);
+                // If email confirmation is required, user won't have a session yet
+                if (result?.user && !result?.session) {
+                    setConfirmationSent(true);
+                } else if (result?.session) {
+                    showToast('Account created! Welcome!');
+                    onLogin();
+                } else {
+                    setConfirmationSent(true);
+                }
+            } else {
+                await signIn(email.trim(), password);
+                showToast('Welcome back!');
+                onLogin();
+            }
+        } catch (err) {
+            const msg = err.message || 'Authentication failed';
+            if (msg.includes('Email not confirmed')) {
+                setConfirmationSent(true);
+            } else {
+                showToast(msg, 'error');
+            }
+        }
         setLoading(false);
     };
 
+    const handleResend = async () => {
+        setLoading(true);
+        try {
+            await signUp(email.trim(), password);
+            showToast('Confirmation email re-sent!');
+        } catch (err) {
+            showToast('Could not resend. Try again later.', 'error');
+        }
+        setLoading(false);
+    };
+
+    if (confirmationSent) {
+        return (
+            <div className="login-container">
+                <div className="login-card">
+                    <div className="login-logo">
+                        <div style={{
+                            width: 72, height: 72,
+                            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                            borderRadius: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto 16px',
+                            boxShadow: '0 8px 32px rgba(34,197,94,0.25)'
+                        }}>
+                            <CheckCircle size={36} color="#fff" />
+                        </div>
+                        <h1 className="login-title" style={{ fontSize: '1.4rem' }}>Check Your Email</h1>
+                        <p className="login-subtitle" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginTop: 8 }}>
+                            We sent a confirmation link to<br />
+                            <strong style={{ color: 'var(--primary-400)' }}>{email}</strong>
+                        </p>
+                    </div>
+
+                    <div style={{
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 12,
+                        padding: '16px 20px',
+                        marginTop: 16,
+                        width: '100%',
+                        boxSizing: 'border-box'
+                    }}>
+                        <p style={{
+                            margin: 0,
+                            fontSize: '0.82rem',
+                            color: 'var(--text-muted)',
+                            lineHeight: 1.5,
+                            textAlign: 'center'
+                        }}>
+                            Click the link in your email to verify your account, then come back and sign in.
+                        </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, marginTop: 20, width: '100%' }}>
+                        <button
+                            onClick={handleResend}
+                            disabled={loading}
+                            className="btn"
+                            style={{
+                                flex: 1, padding: '12px',
+                                background: 'var(--card-bg)',
+                                border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 10,
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                            }}
+                        >
+                            <RotateCcw size={14} /> Resend
+                        </button>
+                        <button
+                            onClick={() => { setConfirmationSent(false); setIsSignUp(false); }}
+                            className="btn btn-primary"
+                            style={{
+                                flex: 2, padding: '12px',
+                                borderRadius: 10,
+                                fontSize: '0.85rem',
+                                fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                            }}
+                        >
+                            <LogIn size={16} /> Go to Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="login-container">
-            <div className="login-logo">
-                <Logo size={72} iconSize={40} borderRadius={20} style={{ margin: '0 auto 16px' }} />
-                <h1>BillMate</h1>
-                <p>Simple billing for smart vendors</p>
-            </div>
-
             <div className="login-card">
-                <div className="login-tabs">
-                    <button
-                        className={`login-tab ${!isRegister ? 'active' : ''}`}
-                        onClick={() => { setIsRegister(false); setError(''); }}
-                    >
-                        Login
-                    </button>
-                    <button
-                        className={`login-tab ${isRegister ? 'active' : ''}`}
-                        onClick={() => { setIsRegister(true); setError(''); }}
-                    >
-                        Register
-                    </button>
+                <div className="login-logo">
+                    <div className="login-logo-icon">🧾</div>
+                    <h1 className="login-title">BillMate</h1>
+                    <p className="login-subtitle">
+                        {isSignUp ? 'Create your account' : 'Sign in to your POS'}
+                    </p>
                 </div>
 
-                <form onSubmit={handleSubmit}>
-                    {isRegister && (
-                        <div className="form-group">
-                            <label className="form-label">Your Name</label>
-                            <div style={{ position: 'relative' }}>
-                                <User size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                                <input
-                                    className="form-input"
-                                    style={{ paddingLeft: 44 }}
-                                    type="text"
-                                    placeholder="Enter your name"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    id="register-name"
-                                />
-                            </div>
-                        </div>
-                    )}
-
+                <form onSubmit={handleSubmit} style={{ width: '100%' }}>
                     <div className="form-group">
-                        <label className="form-label">Phone Number</label>
-                        <div style={{ position: 'relative' }}>
-                            <Phone size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                            <input
-                                className="form-input"
-                                style={{ paddingLeft: 44 }}
-                                type="tel"
-                                placeholder="Enter phone number"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                id="login-phone"
-                            />
-                        </div>
+                        <label className="form-label">
+                            <Mail size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                            Email
+                        </label>
+                        <input
+                            className="form-input"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            autoFocus
+                            autoComplete="email"
+                            id="login-email"
+                        />
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">PIN</label>
+                        <label className="form-label">
+                            <Lock size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                            Password
+                        </label>
                         <div style={{ position: 'relative' }}>
-                            <Lock size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                             <input
                                 className="form-input"
-                                style={{ paddingLeft: 44 }}
-                                type="password"
-                                placeholder="Enter 4-digit PIN"
-                                maxLength={4}
-                                value={pin}
-                                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                                id="login-pin"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="Min 6 characters"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                                id="login-password"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute',
+                                    right: 12,
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    padding: 4
+                                }}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                         </div>
                     </div>
-
-                    {error && (
-                        <p style={{ color: 'var(--danger-400)', fontSize: '0.8rem', marginBottom: 16, textAlign: 'center' }}>
-                            {error}
-                        </p>
-                    )}
 
                     <button
-                        className="btn btn-primary btn-lg btn-block"
                         type="submit"
-                        disabled={loading || !phone || pin.length < 4}
+                        className="btn btn-primary btn-block"
+                        disabled={loading}
+                        style={{
+                            marginTop: 8,
+                            padding: '14px',
+                            fontSize: '0.95rem',
+                            fontWeight: 700,
+                            opacity: loading ? 0.6 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8
+                        }}
                         id="login-submit"
                     >
-                        {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Login'}
+                        {loading ? (
+                            'Please wait...'
+                        ) : isSignUp ? (
+                            <><UserPlus size={18} /> Create Account</>
+                        ) : (
+                            <><LogIn size={18} /> Sign In</>
+                        )}
                     </button>
                 </form>
+
+                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                    <button
+                        onClick={() => setIsSignUp(!isSignUp)}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--primary-400)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            fontFamily: 'Inter, sans-serif'
+                        }}
+                    >
+                        {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                    </button>
+                </div>
             </div>
         </div>
     );

@@ -1,21 +1,13 @@
-import { db } from '../database';
+import { supabase } from '../database/supabase';
 
 export async function exportAllData() {
-    const products = await db.products.toArray();
-    const sales = await db.sales.toArray();
-    const saleItems = await db.saleItems.toArray();
-    const settings = await db.settings.toArray();
-    const expenses = await db.expenses.toArray();
+    const tables = ['products', 'sales', 'sale_items', 'customers', 'suppliers', 'purchases', 'purchase_items', 'expenses', 'settings'];
+    const data = { version: 3, exportDate: new Date().toISOString() };
 
-    const data = {
-        version: 2,
-        exportDate: new Date().toISOString(),
-        products,
-        sales,
-        saleItems,
-        settings,
-        expenses
-    };
+    for (const table of tables) {
+        const { data: rows } = await supabase.from(table).select('*');
+        data[table] = rows || [];
+    }
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -34,19 +26,38 @@ export async function importAllData(jsonString) {
             throw new Error('Invalid backup file format');
         }
 
-        await db.transaction('rw', db.products, db.sales, db.saleItems, db.settings, db.expenses, async () => {
-            await db.products.clear();
-            await db.sales.clear();
-            await db.saleItems.clear();
-            await db.settings.clear();
-            await db.expenses.clear();
+        // Clear existing data in order (children first, then parents)
+        const clearOrder = ['sale_items', 'purchase_items', 'sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'settings'];
+        for (const table of clearOrder) {
+            await supabase.from(table).delete().neq('id', -1).catch(() => {
+                // settings table uses 'key' not 'id'
+                return supabase.from(table).delete().neq('key', '');
+            });
+        }
 
-            if (data.products?.length) await db.products.bulkAdd(data.products);
-            if (data.sales?.length) await db.sales.bulkAdd(data.sales);
-            if (data.saleItems?.length) await db.saleItems.bulkAdd(data.saleItems);
-            if (data.settings?.length) await db.settings.bulkAdd(data.settings);
-            if (data.expenses?.length) await db.expenses.bulkAdd(data.expenses);
-        });
+        // Insert data - handle both old (saleItems) and new (sale_items) backup formats
+        const insertMap = {
+            products: data.products,
+            customers: data.customers,
+            suppliers: data.suppliers,
+            sales: data.sales,
+            sale_items: data.sale_items || data.saleItems,
+            purchases: data.purchases,
+            purchase_items: data.purchase_items || data.purchaseItems,
+            expenses: data.expenses,
+            settings: data.settings
+        };
+
+        for (const [table, rows] of Object.entries(insertMap)) {
+            if (rows?.length) {
+                // Remove auto-generated id fields for tables that use identity columns
+                const cleaned = rows.map(row => {
+                    const { id, ...rest } = row;
+                    return table === 'settings' ? row : rest;
+                });
+                await supabase.from(table).insert(cleaned);
+            }
+        }
 
         return { success: true, message: 'Data imported successfully' };
     } catch (error) {

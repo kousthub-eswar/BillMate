@@ -1,56 +1,51 @@
-import { db } from './db';
+import { supabase } from './supabase';
 
 export async function addSupplier(supplier) {
-    return await db.suppliers.add({
+    const { data, error } = await supabase.from('suppliers').insert({
         name: supplier.name.trim(),
         phone: supplier.phone || '',
         address: supplier.address || '',
-        notes: supplier.notes || '',
-        created_at: new Date().toISOString()
-    });
+        notes: supplier.notes || ''
+    }).select().single();
+    if (error) throw error;
+    return data.id;
 }
 
 export async function getAllSuppliers() {
-    return await db.suppliers.toArray();
+    const { data } = await supabase.from('suppliers').select('*').order('name');
+    return data || [];
 }
 
 export async function getSupplierById(id) {
-    return await db.suppliers.get(id);
+    const { data } = await supabase.from('suppliers').select('*').eq('id', id).single();
+    return data;
 }
 
 export async function updateSupplier(id, updates) {
-    return await db.suppliers.update(id, updates);
+    const { error } = await supabase.from('suppliers').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
 }
 
 export async function deleteSupplier(id) {
-    return await db.suppliers.delete(id);
+    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    if (error) throw error;
 }
 
 export async function searchSuppliers(query) {
     const lower = query.toLowerCase();
-    return await db.suppliers
-        .filter(s =>
-            s.name.toLowerCase().includes(lower) ||
-            (s.phone && s.phone.includes(query))
-        )
-        .toArray();
+    const { data } = await supabase.from('suppliers').select('*').or(`name.ilike.%${lower}%,phone.ilike.%${lower}%`);
+    return data || [];
 }
 
 export async function getSupplierStats(supplierId) {
-    const purchases = await db.purchases
-        .where('supplier_id')
-        .equals(supplierId)
-        .toArray();
-
-    const totalPurchases = purchases.length;
-    const totalSpend = purchases.reduce((sum, p) => sum + (p.total_cost || 0), 0);
-    const lastPurchase = purchases.length > 0
-        ? purchases.sort((a, b) => new Date(b.date) - new Date(a.date))[0]
-        : null;
-
+    const { data: purchases } = await supabase.from('purchases').select('*').eq('supplier_id', supplierId);
+    const list = purchases || [];
+    const totalPurchases = list.length;
+    const totalSpend = list.reduce((sum, p) => sum + Number(p.total_cost || 0), 0);
+    const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
     return {
         totalPurchases,
         totalSpend,
-        lastPurchaseDate: lastPurchase ? lastPurchase.date : null
+        lastPurchaseDate: sorted.length > 0 ? sorted[0].date : null
     };
 }

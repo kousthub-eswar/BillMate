@@ -4,7 +4,7 @@ import {
   Clock, Settings, Wallet, Users, Truck, ClipboardList
 } from 'lucide-react';
 import { initializeSettings } from './database';
-import { isAuthenticated } from './backend/auth';
+import { isAuthenticated, getSession, signOut, onAuthStateChange } from './backend/auth';
 import { ToastProvider } from './components/Toast';
 import OnboardingWizard from './components/OnboardingWizard';
 import SplashScreen from './components/SplashScreen';
@@ -26,26 +26,43 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
-  // Apply saved theme on app mount & initialize settings if already logged in
+  // Listen for Supabase auth state changes
   useEffect(() => {
     const savedTheme = localStorage.getItem('billmate_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
 
-    if (isAuthenticated()) {
-      initializeSettings();
-    }
+    // Validate session on mount
+    getSession().then(session => {
+      if (session) {
+        setLoggedIn(true);
+        initializeSettings();
+      } else {
+        setLoggedIn(false);
+      }
+    });
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setLoggedIn(true);
+      } else if (event === 'SIGNED_OUT') {
+        setLoggedIn(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogin = async () => {
     await initializeSettings();
     setLoggedIn(true);
-    // Check if onboarding is needed
     if (!localStorage.getItem('billmate_onboarding_done')) {
       setShowOnboarding(true);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     setLoggedIn(false);
     setActivePage('billing');
   };
@@ -87,7 +104,6 @@ function App() {
     }
   };
 
-  // Show onboarding for first-time users
   if (showOnboarding) {
     return (
       <ToastProvider>
@@ -103,9 +119,7 @@ function App() {
       <div className="app-container">
         {renderPage()}
 
-        {/* Bottom Navigation */}
         <nav className="bottom-nav">
-          {/* eslint-disable-next-line no-unused-vars */}
           {navItems.map(({ key, label, icon: Icon, isBilling }) => (
             <button
               key={key}

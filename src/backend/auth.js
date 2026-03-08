@@ -1,52 +1,34 @@
-const AUTH_KEY = 'billmate_auth';
+import { supabase } from '../database/supabase';
 
-export function login(phone, pin) {
-    // Simple local authentication
-    const users = getUsers();
-    const user = users.find(u => u.phone === phone && u.pin === pin);
-
-    if (user) {
-        const session = {
-            phone: user.phone,
-            name: user.name,
-            loggedIn: true,
-            loginTime: new Date().toISOString()
-        };
-        localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-        return { success: true, user: session };
-    }
-
-    return { success: false, error: 'Invalid phone or PIN' };
+export async function signUp(email, password) {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    return data;
 }
 
-export function register(name, phone, pin) {
-    const users = getUsers();
-
-    if (users.find(u => u.phone === phone)) {
-        return { success: false, error: 'Phone number already registered' };
-    }
-
-    users.push({ name, phone, pin });
-    localStorage.setItem('billmate_users', JSON.stringify(users));
-
-    return login(phone, pin);
+export async function signIn(email, password) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
 }
 
-export function logout() {
-    localStorage.removeItem(AUTH_KEY);
+export async function signOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
 }
 
-export function getSession() {
-    const session = localStorage.getItem(AUTH_KEY);
-    return session ? JSON.parse(session) : null;
+export async function getSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
 }
 
 export function isAuthenticated() {
-    const session = getSession();
-    return session && session.loggedIn;
+    // Synchronous check using localStorage for quick init
+    // The actual session validation happens async via getSession()
+    const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    return !!storageKey && !!localStorage.getItem(storageKey);
 }
 
-function getUsers() {
-    const users = localStorage.getItem('billmate_users');
-    return users ? JSON.parse(users) : [];
+export function onAuthStateChange(callback) {
+    return supabase.auth.onAuthStateChange(callback);
 }

@@ -1,231 +1,105 @@
-import { db } from './db';
+import { supabase } from './supabase';
 
 export async function createSale(cart, paymentMethod, customerId = null, discount = null) {
-    const saleItems = cart.map(item => ({
-        product_id: item.id,
-        product_name: item.name,
-        quantity: item.quantity,
-        selling_price: item.selling_price,
-        cost_price: item.cost_price,
-        subtotal: item.selling_price * item.quantity
-    }));
-
-    const subtotal = saleItems.reduce((sum, item) => sum + item.subtotal, 0);
-
-    // Calculate discount
-    let discountAmount = 0;
-    if (discount && discount.value > 0) {
-        if (discount.type === 'percent') {
-            discountAmount = (subtotal * discount.value) / 100;
-        } else {
-            discountAmount = Math.min(discount.value, subtotal); // Can't discount more than total
-        }
-    }
-
-    const total = subtotal - discountAmount;
-    const profitBeforeDiscount = saleItems.reduce(
-        (sum, item) => sum + (item.selling_price - item.cost_price) * item.quantity,
-        0
-    );
-    const profit = profitBeforeDiscount - discountAmount;
-
-    const saleId = await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
-        const id = await db.sales.add({
-            date: new Date().toISOString(),
-            total,
-            subtotal,
-            discount_amount: discountAmount,
-            discount_type: discount?.type || null,
-            discount_value: discount?.value || 0,
-            profit,
-            payment_method: paymentMethod,
-            refunded: false,
-            customer_id: customerId,
-            item_count: saleItems.reduce((sum, item) => sum + item.quantity, 0)
-        });
-
-        const itemsWithSaleId = saleItems.map(item => ({
-            ...item,
-            sale_id: id
-        }));
-        await db.saleItems.bulkAdd(itemsWithSaleId);
-
-        // Reduce stock
-        for (const item of cart) {
-            const product = await db.products.get(item.id);
-            if (product) {
-                await db.products.update(item.id, {
-                    stock_quantity: Math.max(0, product.stock_quantity - item.quantity)
-                });
-            }
-        }
-
-        // If Credit sale, update customer balance
-        if (paymentMethod === 'Credit' && customerId) {
-            const customer = await db.customers.get(customerId);
-            if (customer) {
-                await db.customers.update(customerId, {
-                    balance: (customer.balance || 0) + total
-                });
-            }
-        }
-
-        return id;
+    const { data, error } = await supabase.rpc('create_sale', {
+        p_cart: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            selling_price: item.selling_price,
+            cost_price: item.cost_price || 0
+        })),
+        p_payment_method: paymentMethod,
+        p_customer_id: customerId || null,
+        p_discount_type: discount?.type || null,
+        p_discount_value: discount?.value || 0
     });
-
-    return { saleId, total, profit };
+    if (error) throw error;
+    return { saleId: data.saleId, total: data.total, profit: data.profit };
 }
 
 export async function getSaleById(id) {
-    const sale = await db.sales.get(id);
+    const { data: sale } = await supabase.from('sales').select('*').eq('id', id).single();
     if (sale) {
-        sale.items = await db.saleItems.where('sale_id').equals(id).toArray();
+        const { data: items } = await supabase.from('sale_items').select('*').eq('sale_id', id);
+        sale.items = items || [];
     }
     return sale;
 }
 
 export async function getSales(filter = 'today') {
-    let sales = await db.sales.orderBy('date').reverse().toArray();
-    // Exclude settlement records from general sales history
-    sales = sales.filter(s => s.payment_method !== 'Settle');
+    let query = supabase.from('sales').select('*').neq('payment_method', 'Settle').order('date', { ascending: false });
 
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
     switch (filter) {
         case 'today':
-            sales = sales.filter(s => new Date(s.date) >= startOfToday);
+            query = query.gte('date', startOfToday);
             break;
         case 'week': {
-            const weekAgo = new Date(startOfToday);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            sales = sales.filter(s => new Date(s.date) >= weekAgo);
+            const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+            query = query.gte('date', weekAgo);
             break;
         }
         case 'month': {
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            sales = sales.filter(s => new Date(s.date) >= monthStart);
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            query = query.gte('date', monthStart);
             break;
         }
         case 'all':
             break;
         default:
             if (filter.startDate && filter.endDate) {
-                const start = new Date(filter.startDate);
+                query = query.gte('date', new Date(filter.startDate).toISOString());
                 const end = new Date(filter.endDate);
                 end.setHours(23, 59, 59, 999);
-                sales = sales.filter(s => {
-                    const d = new Date(s.date);
-                    return d >= start && d <= end;
-                });
+                query = query.lte('date', end.toISOString());
             }
     }
 
-    return sales;
+    const { data } = await query;
+    return data || [];
 }
 
 export async function refundSale(saleId) {
-    return await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
-        const sale = await db.sales.get(saleId);
-        if (!sale) throw new Error('Sale not found');
-        if (sale.refunded) throw new Error('Transaction is already refunded');
-
-        await db.sales.update(saleId, { refunded: true });
-
-        // Restore stock
-        const items = await db.saleItems.where('sale_id').equals(saleId).toArray();
-        for (const item of items) {
-            const product = await db.products.get(item.product_id);
-            if (product) {
-                await db.products.update(item.product_id, {
-                    stock_quantity: product.stock_quantity + item.quantity
-                });
-            }
-        }
-
-        // If it was a Credit sale, reverse customer balance
-        if (sale.payment_method === 'Credit' && sale.customer_id) {
-            const customer = await db.customers.get(sale.customer_id);
-            if (customer) {
-                await db.customers.update(sale.customer_id, {
-                    balance: Math.max(0, (customer.balance || 0) - sale.total)
-                });
-            }
-        }
-
-        return true;
-    });
+    const { data, error } = await supabase.rpc('refund_sale', { p_sale_id: saleId });
+    if (error) throw error;
+    return data;
 }
 
 export async function undoLastSale() {
-    return await db.transaction('rw', db.sales, db.saleItems, db.products, db.customers, async () => {
-        // Find most recent non-refunded sale
-        const allSales = await db.sales.orderBy('date').reverse().toArray();
-        const lastSale = allSales.find(s => !s.refunded);
-        if (!lastSale) return { success: false, message: 'No recent sale to undo' };
-
-        // Mark as refunded
-        await db.sales.update(lastSale.id, { refunded: true });
-
-        // Restore stock quantities
-        const items = await db.saleItems.where('sale_id').equals(lastSale.id).toArray();
-        for (const item of items) {
-            const product = await db.products.get(item.product_id);
-            if (product) {
-                await db.products.update(item.product_id, {
-                    stock_quantity: product.stock_quantity + item.quantity
-                });
-            }
-        }
-
-        // If it was a Credit sale, reverse customer balance
-        if (lastSale.payment_method === 'Credit' && lastSale.customer_id) {
-            const customer = await db.customers.get(lastSale.customer_id);
-            if (customer) {
-                await db.customers.update(lastSale.customer_id, {
-                    balance: Math.max(0, (customer.balance || 0) - lastSale.total)
-                });
-            }
-        }
-
-        return { success: true, sale: lastSale };
-    });
+    const { data, error } = await supabase.rpc('undo_last_sale');
+    if (error) throw error;
+    return data || { success: false, message: 'Failed to undo' };
 }
 
 export async function getTodayStats() {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-    const allSales = await db.sales.toArray();
-    const todaySales = allSales.filter(
-        s => new Date(s.date) >= startOfToday && !s.refunded && s.payment_method !== 'Settle'
-    );
+    const { data: todaySales } = await supabase.from('sales').select('total, profit')
+        .gte('date', startOfToday).eq('refunded', false).neq('payment_method', 'Settle');
 
-    const totalRevenue = todaySales.reduce((sum, s) => sum + s.total, 0);
-    const totalProfit = todaySales.reduce((sum, s) => sum + s.profit, 0);
-    const transactionCount = todaySales.length;
-
+    const sales = todaySales || [];
     return {
-        totalRevenue,
-        totalProfit,
-        transactionCount
+        totalRevenue: sales.reduce((s, r) => s + Number(r.total), 0),
+        totalProfit: sales.reduce((s, r) => s + Number(r.profit), 0),
+        transactionCount: sales.length
     };
 }
 
 export async function getTopSellingProducts(limit = 5) {
-    const items = await db.saleItems.toArray();
-    const sales = await db.sales.toArray();
-    const nonRefundedIds = new Set(sales.filter(s => !s.refunded).map(s => s.id));
+    const { data: sales } = await supabase.from('sales').select('id').eq('refunded', false);
+    if (!sales || sales.length === 0) return [];
+
+    const saleIds = sales.map(s => s.id);
+    const { data: items } = await supabase.from('sale_items').select('product_name, quantity').in('sale_id', saleIds);
 
     const productSales = {};
-    items
-        .filter(item => nonRefundedIds.has(item.sale_id))
-        .forEach(item => {
-            if (!productSales[item.product_name]) {
-                productSales[item.product_name] = 0;
-            }
-            productSales[item.product_name] += item.quantity;
-        });
+    (items || []).forEach(item => {
+        productSales[item.product_name] = (productSales[item.product_name] || 0) + item.quantity;
+    });
 
     return Object.entries(productSales)
         .sort((a, b) => b[1] - a[1])

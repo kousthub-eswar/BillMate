@@ -1,87 +1,70 @@
-import { db } from './db';
+import { supabase } from './supabase';
 
 export async function getAllProducts() {
-    return await db.products.toArray();
+    const { data, error } = await supabase.from('products').select('*').order('name');
+    if (error) throw error;
+    return data || [];
 }
 
 export async function getProductById(id) {
-    return await db.products.get(id);
+    const { data } = await supabase.from('products').select('*').eq('id', id).single();
+    return data;
 }
 
 export async function addProduct(product) {
-    // Check for duplicate name (case-insensitive)
-    const existing = await db.products
-        .filter(p => p.name.toLowerCase().trim() === product.name.toLowerCase().trim())
-        .first();
-    if (existing) {
-        throw new Error(`Product "${existing.name}" already exists`);
-    }
-
-    return await db.products.add({
+    const { data, error } = await supabase.from('products').insert({
         name: product.name.trim(),
-        selling_price: parseFloat(product.selling_price),
-        cost_price: parseFloat(product.cost_price),
-        stock_quantity: parseInt(product.stock_quantity),
+        selling_price: parseFloat(product.selling_price) || 0,
+        cost_price: parseFloat(product.cost_price) || 0,
+        stock_quantity: parseInt(product.stock_quantity) || 0,
         category: product.category || 'General',
-        frequently_used: product.frequently_used || false,
+        frequently_used: product.frequently_used ? 1 : 0,
         barcode: product.barcode || ''
-    });
+    }).select().single();
+    if (error) throw error;
+    return data.id;
 }
 
 export async function updateProduct(id, updates) {
-    if (updates.name) {
-        const existing = await db.products
-            .filter(p => p.name.toLowerCase().trim() === updates.name.toLowerCase().trim() && p.id !== id)
-            .first();
-        if (existing) {
-            throw new Error(`Product "${updates.name}" already exists`);
-        }
-    }
-    return await db.products.update(id, updates);
+    const clean = { ...updates, updated_at: new Date().toISOString() };
+    if (clean.selling_price !== undefined) clean.selling_price = parseFloat(clean.selling_price) || 0;
+    if (clean.cost_price !== undefined) clean.cost_price = parseFloat(clean.cost_price) || 0;
+    if (clean.stock_quantity !== undefined) clean.stock_quantity = parseInt(clean.stock_quantity) || 0;
+    if (clean.frequently_used !== undefined) clean.frequently_used = clean.frequently_used ? 1 : 0;
+    const { error } = await supabase.from('products').update(clean).eq('id', id);
+    if (error) throw error;
 }
 
 export async function deleteProduct(id) {
-    return await db.products.delete(id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) throw error;
 }
 
 export async function searchProducts(query) {
-    const lowerQuery = query.toLowerCase();
-    return await db.products
-        .filter(p =>
-            p.name.toLowerCase().includes(lowerQuery) ||
-            (p.barcode && p.barcode.includes(query))
-        )
-        .toArray();
+    const lower = query.toLowerCase();
+    const { data } = await supabase.from('products').select('*').or(`name.ilike.%${lower}%,barcode.ilike.%${lower}%,category.ilike.%${lower}%`);
+    return data || [];
 }
 
 export async function getFrequentProducts() {
-    return await db.products
-        .where('frequently_used')
-        .equals(1)
-        .toArray();
+    const { data } = await supabase.from('products').select('*').eq('frequently_used', 1);
+    return data || [];
 }
 
-export async function getLowStockProducts(threshold) {
-    return await db.products
-        .filter(p => p.stock_quantity <= threshold)
-        .toArray();
+export async function getLowStockProducts(threshold = 5) {
+    const { data } = await supabase.from('products').select('*').lte('stock_quantity', threshold).order('stock_quantity');
+    return data || [];
 }
 
 export async function adjustStock(id, adjustment) {
-    const product = await db.products.get(id);
-    if (product) {
-        if (product.stock_quantity + adjustment < 0) {
-            throw new Error('Stock cannot go below zero');
-        }
-        const newQty = product.stock_quantity + adjustment;
-        await db.products.update(id, { stock_quantity: newQty });
-        return newQty;
-    }
-    return null;
+    const product = await getProductById(id);
+    if (!product) throw new Error('Product not found');
+    const newQty = Math.max(0, product.stock_quantity + adjustment);
+    await supabase.from('products').update({ stock_quantity: newQty, updated_at: new Date().toISOString() }).eq('id', id);
 }
 
 export async function getCategories() {
-    const products = await db.products.toArray();
-    const categories = [...new Set(products.map(p => p.category))];
-    return categories.filter(Boolean);
+    const { data } = await supabase.from('products').select('category');
+    const cats = new Set((data || []).map(p => p.category).filter(Boolean));
+    return [...cats];
 }
