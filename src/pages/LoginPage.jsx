@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, CheckCircle, RotateCcw } from 'lucide-react';
-import { signIn, signUp } from '../backend/auth';
+import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, CheckCircle, RotateCcw, KeyRound, ArrowLeft } from 'lucide-react';
+import { signIn, signUp, resetPassword } from '../backend/auth';
 import { useToast } from '../components/Toast';
 
 export default function LoginPage({ onLogin }) {
@@ -10,6 +10,9 @@ export default function LoginPage({ onLogin }) {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [confirmationSent, setConfirmationSent] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+    const [resetEmailSent, setResetEmailSent] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
     const showToast = useToast();
 
     const handleSubmit = async (e) => {
@@ -62,6 +65,35 @@ export default function LoginPage({ onLogin }) {
         setLoading(false);
     };
 
+    const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        const emailToReset = resetEmail.trim();
+        if (!emailToReset) {
+            showToast('Please enter your email address', 'error');
+            return;
+        }
+        setLoading(true);
+        try {
+            await resetPassword(emailToReset);
+            setResetEmailSent(true);
+        } catch (err) {
+            showToast(err.message || 'Could not send reset email', 'error');
+        }
+        setLoading(false);
+    };
+
+    const handleResendReset = async () => {
+        setLoading(true);
+        try {
+            await resetPassword(resetEmail.trim());
+            showToast('Reset email re-sent!');
+        } catch (err) {
+            showToast('Could not resend. Try again later.', 'error');
+        }
+        setLoading(false);
+    };
+
+    // ── Email Confirmation Sent Screen ──
     if (confirmationSent) {
         return (
             <div className="login-container">
@@ -142,6 +174,176 @@ export default function LoginPage({ onLogin }) {
         );
     }
 
+    // ── Reset Email Sent Screen ──
+    if (resetEmailSent) {
+        return (
+            <div className="login-container">
+                <div className="login-card">
+                    <div className="login-logo">
+                        <div style={{
+                            width: 72, height: 72,
+                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600))',
+                            borderRadius: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto 16px',
+                            boxShadow: '0 8px 32px rgba(234,179,8,0.25)'
+                        }}>
+                            <Mail size={36} color="#fff" />
+                        </div>
+                        <h1 className="login-title" style={{ fontSize: '1.4rem' }}>Reset Link Sent</h1>
+                        <p className="login-subtitle" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginTop: 8 }}>
+                            We sent a password reset link to<br />
+                            <strong style={{ color: 'var(--primary-400)' }}>{resetEmail}</strong>
+                        </p>
+                    </div>
+
+                    <div style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 12,
+                        padding: '16px 20px',
+                        marginTop: 16,
+                        width: '100%',
+                        boxSizing: 'border-box'
+                    }}>
+                        <p style={{
+                            margin: 0,
+                            fontSize: '0.82rem',
+                            color: 'var(--text-muted)',
+                            lineHeight: 1.5,
+                            textAlign: 'center'
+                        }}>
+                            Click the link in your email to set a new password. Check your spam folder if you don't see it.
+                        </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, marginTop: 20, width: '100%' }}>
+                        <button
+                            onClick={handleResendReset}
+                            disabled={loading}
+                            className="btn"
+                            id="resend-reset-btn"
+                            style={{
+                                flex: 1, padding: '12px',
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 10,
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                            }}
+                        >
+                            <RotateCcw size={14} /> Resend
+                        </button>
+                        <button
+                            onClick={() => { setResetEmailSent(false); setShowForgotPassword(false); setResetEmail(''); }}
+                            className="btn btn-primary"
+                            id="back-to-login-btn"
+                            style={{
+                                flex: 2, padding: '12px',
+                                borderRadius: 10,
+                                fontSize: '0.85rem',
+                                fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                            }}
+                        >
+                            <LogIn size={16} /> Back to Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Forgot Password Form ──
+    if (showForgotPassword) {
+        return (
+            <div className="login-container">
+                <div className="login-card">
+                    <div className="login-logo">
+                        <div style={{
+                            width: 72, height: 72,
+                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600))',
+                            borderRadius: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto 16px',
+                            boxShadow: '0 8px 32px rgba(234,179,8,0.25)'
+                        }}>
+                            <KeyRound size={36} color="#fff" />
+                        </div>
+                        <h1 className="login-title" style={{ fontSize: '1.4rem' }}>Forgot Password?</h1>
+                        <p className="login-subtitle" style={{ fontSize: '0.9rem', lineHeight: 1.5, marginTop: 8 }}>
+                            Enter your email and we'll send you a link to reset your password.
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleForgotPassword} style={{ width: '100%', marginTop: 8 }}>
+                        <div className="form-group">
+                            <label className="form-label">
+                                <Mail size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                                Email Address
+                            </label>
+                            <input
+                                className="form-input"
+                                type="email"
+                                placeholder="you@example.com"
+                                value={resetEmail}
+                                onChange={(e) => setResetEmail(e.target.value)}
+                                autoFocus
+                                autoComplete="email"
+                                id="reset-email"
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="btn btn-primary btn-block"
+                            disabled={loading}
+                            id="send-reset-btn"
+                            style={{
+                                marginTop: 8,
+                                padding: '14px',
+                                fontSize: '0.95rem',
+                                fontWeight: 700,
+                                opacity: loading ? 0.6 : 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8
+                            }}
+                        >
+                            {loading ? 'Sending...' : <><Mail size={18} /> Send Reset Link</>}
+                        </button>
+                    </form>
+
+                    <div style={{ marginTop: 20, textAlign: 'center' }}>
+                        <button
+                            onClick={() => { setShowForgotPassword(false); setResetEmail(''); }}
+                            id="back-to-signin-btn"
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--primary-400)',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                fontFamily: 'Inter, sans-serif',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                            }}
+                        >
+                            <ArrowLeft size={14} /> Back to Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Main Login / Sign Up Form ──
     return (
         <div className="login-container">
             <div className="login-card">
@@ -206,12 +408,37 @@ export default function LoginPage({ onLogin }) {
                         </div>
                     </div>
 
+                    {!isSignUp && (
+                        <div style={{ textAlign: 'right', marginTop: -4, marginBottom: 8 }}>
+                            <button
+                                type="button"
+                                onClick={() => { setShowForgotPassword(true); setResetEmail(email); }}
+                                id="forgot-password-btn"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    fontFamily: 'Inter, sans-serif',
+                                    padding: '2px 0',
+                                    transition: 'color 0.2s ease'
+                                }}
+                                onMouseOver={(e) => e.target.style.color = 'var(--primary-400)'}
+                                onMouseOut={(e) => e.target.style.color = 'var(--text-muted)'}
+                            >
+                                Forgot Password?
+                            </button>
+                        </div>
+                    )}
+
                     <button
                         type="submit"
                         className="btn btn-primary btn-block"
                         disabled={loading}
                         style={{
-                            marginTop: 8,
+                            marginTop: isSignUp ? 8 : 0,
                             padding: '14px',
                             fontSize: '0.95rem',
                             fontWeight: 700,
