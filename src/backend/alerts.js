@@ -1,4 +1,5 @@
-import { db } from '../database/db';
+import { supabase } from '../database/supabase';
+import { getSetting } from '../database/db';
 
 /**
  * Generate all smart alerts from current data
@@ -30,6 +31,7 @@ export async function generateAlerts() {
         alerts.push(...milestoneAlerts);
     } catch (_err) {
         // Silently handle errors - alerts are non-critical
+        console.warn('Alert generation error:', _err);
     }
 
     // Sort: critical first, then warning, info, success
@@ -44,12 +46,13 @@ export async function generateAlerts() {
  */
 async function checkLowStock() {
     const alerts = [];
-    const settings = await db.settings.get('low_stock_threshold');
-    const threshold = parseInt(settings?.value) || 5;
+    const thresholdValue = await getSetting('low_stock_threshold');
+    const threshold = parseInt(thresholdValue) || 5;
 
-    const products = await db.products.toArray();
-    const outOfStock = products.filter(p => p.stock_quantity === 0);
-    const lowStock = products.filter(p => p.stock_quantity > 0 && p.stock_quantity <= threshold);
+    const { data: products } = await supabase.from('products').select('*');
+    const allProducts = products || [];
+    const outOfStock = allProducts.filter(p => p.stock_quantity === 0);
+    const lowStock = allProducts.filter(p => p.stock_quantity > 0 && p.stock_quantity <= threshold);
 
     if (outOfStock.length > 0) {
         alerts.push({
@@ -81,8 +84,9 @@ async function checkLowStock() {
  */
 async function checkOverdueCredits() {
     const alerts = [];
-    const customers = await db.customers?.toArray() || [];
-    const withDebt = customers.filter(c => (c.balance || 0) > 0);
+    const { data: customers } = await supabase.from('customers').select('*');
+    const allCustomers = customers || [];
+    const withDebt = allCustomers.filter(c => (c.balance || 0) > 0);
 
     if (withDebt.length === 0) return alerts;
 
@@ -94,8 +98,7 @@ async function checkOverdueCredits() {
     const biggest = sorted[0];
 
     if (totalCredit > 0) {
-        const currSetting = await db.settings.get('currency');
-        const currency = currSetting?.value || '₹';
+        const currency = await getSetting('currency') || '₹';
 
         alerts.push({
             id: 'credit-outstanding',
@@ -120,8 +123,9 @@ async function checkDailyPerformance() {
     const startOfYesterday = new Date(startOfToday);
     startOfYesterday.setDate(startOfYesterday.getDate() - 1);
 
-    const allSales = await db.sales.toArray();
-    const nonRefunded = allSales.filter(s => !s.refunded);
+    const { data: allSales } = await supabase.from('sales').select('*');
+    const sales = allSales || [];
+    const nonRefunded = sales.filter(s => !s.refunded);
 
     const todaySales = nonRefunded.filter(s => new Date(s.date) >= startOfToday);
     const yesterdaySales = nonRefunded.filter(s => {
@@ -129,11 +133,10 @@ async function checkDailyPerformance() {
         return d >= startOfYesterday && d < startOfToday;
     });
 
-    const todayRevenue = todaySales.reduce((sum, s) => sum + s.total, 0);
-    const yesterdayRevenue = yesterdaySales.reduce((sum, s) => sum + s.total, 0);
+    const todayRevenue = todaySales.reduce((sum, s) => sum + Number(s.total), 0);
+    const yesterdayRevenue = yesterdaySales.reduce((sum, s) => sum + Number(s.total), 0);
 
-    const currSetting = await db.settings.get('currency');
-    const currency = currSetting?.value || '₹';
+    const currency = await getSetting('currency') || '₹';
 
     // No sales yet today
     if (todaySales.length === 0 && now.getHours() >= 10) {
@@ -185,9 +188,10 @@ async function checkExpenseAnomalies() {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const allExpenses = await db.expenses?.toArray() || [];
-    const todayExpenses = allExpenses.filter(e => new Date(e.date) >= startOfToday);
-    const todayTotal = todayExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const { data: allExpenses } = await supabase.from('expenses').select('*');
+    const expenses = allExpenses || [];
+    const todayExpenses = expenses.filter(e => new Date(e.date) >= startOfToday);
+    const todayTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
     if (todayTotal === 0) return alerts;
 
@@ -195,15 +199,14 @@ async function checkExpenseAnomalies() {
     const weekAgo = new Date(startOfToday);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const weekExpenses = allExpenses.filter(e => {
+    const weekExpenses = expenses.filter(e => {
         const d = new Date(e.date);
         return d >= weekAgo && d < startOfToday;
     });
-    const weekTotal = weekExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const weekTotal = weekExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const avgDaily = weekTotal / 7;
 
-    const currSetting = await db.settings.get('currency');
-    const currency = currSetting?.value || '₹';
+    const currency = await getSetting('currency') || '₹';
 
     if (avgDaily > 0 && todayTotal > avgDaily * 1.5) {
         const pctHigher = (((todayTotal - avgDaily) / avgDaily) * 100).toFixed(0);
@@ -225,14 +228,14 @@ async function checkExpenseAnomalies() {
  */
 async function checkMilestones() {
     const alerts = [];
-    const allSales = await db.sales.toArray();
-    const nonRefunded = allSales.filter(s => !s.refunded);
+    const { data: allSales } = await supabase.from('sales').select('*');
+    const sales = allSales || [];
+    const nonRefunded = sales.filter(s => !s.refunded);
 
     const totalTransactions = nonRefunded.length;
-    const totalRevenue = nonRefunded.reduce((sum, s) => sum + s.total, 0);
+    const totalRevenue = nonRefunded.reduce((sum, s) => sum + Number(s.total), 0);
 
-    const currSetting = await db.settings.get('currency');
-    const currency = currSetting?.value || '₹';
+    const currency = await getSetting('currency') || '₹';
 
     // Transaction milestones
     const txMilestones = [10, 25, 50, 100, 250, 500, 1000];

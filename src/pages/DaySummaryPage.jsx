@@ -8,7 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import {
     getTodayStats, getTopSellingProducts, getLowStockProducts,
-    getSetting, getTodayExpenseTotal, getSales
+    getSetting, setSetting, getTodayExpenseTotal, getSales
 } from '../database';
 
 export default function DaySummaryPage({ onBack }) {
@@ -69,7 +69,6 @@ export default function DaySummaryPage({ onBack }) {
     const upiReceived = todaySales.filter(s => s.payment_method === 'UPI').reduce((sum, s) => sum + s.total, 0);
 
     const handleCloseDay = async () => {
-        const { setSetting } = await import('../database');
         await setSetting('last_closed_day', new Date().toISOString());
         showToast('Day closed successfully. Summary saved.');
         setShowCloseConfirm(false);
@@ -108,7 +107,7 @@ export default function DaySummaryPage({ onBack }) {
 
             {/* Revenue Card - Hero */}
             <div style={{
-                background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #c88b20))',
+                background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #1d4ed8))',
                 borderRadius: 'var(--radius-lg)',
                 padding: '24px 20px',
                 marginBottom: 16,
@@ -220,7 +219,7 @@ export default function DaySummaryPage({ onBack }) {
                         <div style={{
                             width: 44, height: 44,
                             borderRadius: 'var(--radius-md)',
-                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #c88b20))',
+                            background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #1d4ed8))',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',

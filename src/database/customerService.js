@@ -1,7 +1,9 @@
-import { supabase } from './supabase';
+import { supabase, getCurrentUserId } from './supabase';
 
 export async function addCustomer(customer) {
+    const userId = await getCurrentUserId();
     const { data, error } = await supabase.from('customers').insert({
+        user_id: userId,
         name: customer.name.trim(),
         phone: customer.phone || '',
         balance: 0
@@ -21,6 +23,7 @@ export async function getCustomerById(id) {
 }
 
 export async function updateCustomerBalance(id, amount) {
+    const userId = await getCurrentUserId();
     const customer = await getCustomerById(id);
     if (!customer) throw new Error('Customer not found');
     const newBalance = Math.max(0, (Number(customer.balance) || 0) - amount);
@@ -28,6 +31,7 @@ export async function updateCustomerBalance(id, amount) {
 
     // Also record a settlement in sales for history
     await supabase.from('sales').insert({
+        user_id: userId,
         date: new Date().toISOString(),
         total: 0,
         subtotal: 0,

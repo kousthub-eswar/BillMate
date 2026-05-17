@@ -1,7 +1,9 @@
-import { supabase } from './supabase';
+import { supabase, getCurrentUserId } from './supabase';
 
 export async function addSupplier(supplier) {
+    const userId = await getCurrentUserId();
     const { data, error } = await supabase.from('suppliers').insert({
+        user_id: userId,
         name: supplier.name.trim(),
         phone: supplier.phone || '',
         address: supplier.address || '',
@@ -22,7 +24,9 @@ export async function getSupplierById(id) {
 }
 
 export async function updateSupplier(id, updates) {
-    const { error } = await supabase.from('suppliers').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+    const clean = { ...updates, updated_at: new Date().toISOString() };
+    delete clean.user_id;
+    const { error } = await supabase.from('suppliers').update(clean).eq('id', id);
     if (error) throw error;
 }
 

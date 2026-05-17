@@ -170,7 +170,7 @@ export default function SettingsPage({ onLogout }) {
                 <div className="settings-group-title">Appearance</div>
 
                 <div className="settings-item" onClick={toggleTheme} id="theme-toggle">
-                    <div className="settings-item-icon" style={{ background: theme === 'dark' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 166, 35, 0.15)', color: theme === 'dark' ? 'var(--info-400)' : 'var(--primary-400)' }}>
+                    <div className="settings-item-icon" style={{ background: theme === 'dark' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: theme === 'dark' ? 'var(--info-400)' : 'var(--primary-400)' }}>
                         <span className="theme-toggle-icon" style={{ display: 'flex' }}>
                             {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
                         </span>
@@ -187,10 +187,10 @@ export default function SettingsPage({ onLogout }) {
                         borderRadius: '16px',
                         background: theme === 'dark'
                             ? 'linear-gradient(135deg, #1e293b, #334155)'
-                            : 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                            : 'linear-gradient(135deg, #dbeafe, #bfdbfe)',
                         border: theme === 'dark'
                             ? '1.5px solid rgba(56, 189, 248, 0.3)'
-                            : '1.5px solid rgba(245, 166, 35, 0.3)',
+                            : '1.5px solid rgba(59, 130, 246, 0.3)',
                         position: 'relative',
                         cursor: 'pointer',
                         flexShrink: 0,
@@ -218,10 +218,10 @@ export default function SettingsPage({ onLogout }) {
                             borderRadius: '50%',
                             background: theme === 'dark'
                                 ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)'
-                                : 'linear-gradient(135deg, #f59e0b, #f5a623)',
+                                : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                             boxShadow: theme === 'dark'
                                 ? '0 2px 8px rgba(56, 189, 248, 0.4)'
-                                : '0 2px 8px rgba(245, 166, 35, 0.4)',
+                                : '0 2px 8px rgba(59, 130, 246, 0.4)',
                             transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                             display: 'flex',
                             alignItems: 'center',
@@ -277,7 +277,7 @@ export default function SettingsPage({ onLogout }) {
                 <div className="settings-group-title">Data Management</div>
 
                 {needsBackup && (
-                    <div style={{ background: 'rgba(245, 166, 35, 0.1)', padding: 12, borderRadius: 12, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: 12, borderRadius: 12, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                         <AlertTriangle size={20} style={{ color: 'var(--warning-500)', flexShrink: 0 }} />
                         <div>
                             <div style={{ fontWeight: 600, color: 'var(--warning-500)', fontSize: '0.85rem' }}>You have not backed up your data recently.</div>
@@ -363,9 +363,9 @@ export default function SettingsPage({ onLogout }) {
                                 showToast('Open in Chrome and use "Add to Home Screen"', 'info');
                             }
                         }}
-                        style={{ borderColor: 'rgba(245, 166, 35, 0.2)' }}
+                        style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}
                     >
-                        <div className="settings-item-icon" style={{ background: 'rgba(245, 166, 35, 0.15)', color: 'var(--primary-400)' }}>
+                        <div className="settings-item-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary-400)' }}>
                             <Smartphone size={18} />
                         </div>
                         <div className="settings-item-info">

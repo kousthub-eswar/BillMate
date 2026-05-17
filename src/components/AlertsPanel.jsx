@@ -10,10 +10,10 @@ const SEVERITY_STYLES = {
         dot: '#ef4444'
     },
     warning: {
-        border: 'rgba(245, 166, 35, 0.25)',
-        bg: 'rgba(245, 166, 35, 0.06)',
-        accent: 'var(--primary-400)',
-        dot: '#f5a623'
+        border: 'rgba(245, 158, 11, 0.25)',
+        bg: 'rgba(245, 158, 11, 0.06)',
+        accent: 'var(--warning-500)',
+        dot: '#f59e0b'
     },
     info: {
         border: 'rgba(56, 189, 248, 0.2)',

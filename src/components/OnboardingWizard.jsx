@@ -285,7 +285,7 @@ export default function OnboardingWizard({ onComplete }) {
                             justifyContent: 'center',
                             margin: '0 auto 24px',
                             animation: 'pulse 2s infinite',
-                            boxShadow: '0 0 40px rgba(245, 166, 35, 0.3)'
+                            boxShadow: '0 0 40px rgba(37, 99, 235, 0.3)'
                         }}>
                             <Sparkles size={36} color="#000" />
                         </div>

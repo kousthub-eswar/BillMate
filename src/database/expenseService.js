@@ -1,7 +1,9 @@
-import { supabase } from './supabase';
+import { supabase, getCurrentUserId } from './supabase';
 
 export async function addExpense(expense) {
+    const userId = await getCurrentUserId();
     const { data, error } = await supabase.from('expenses').insert({
+        user_id: userId,
         type: expense.type,
         amount: parseFloat(expense.amount),
         date: new Date().toISOString(),

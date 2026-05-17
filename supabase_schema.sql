@@ -1,5 +1,6 @@
 -- =============================================
--- BillMate POS — Complete Supabase Schema
+-- BillMate POS — Complete Supabase Schema v2
+-- Multi-tenant with user_id isolation
 -- Run this entire file in your Supabase SQL Editor
 -- =============================================
 
@@ -9,6 +10,7 @@
 
 create table if not exists products (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   name text not null,
   selling_price numeric(12,2) not null default 0,
   cost_price numeric(12,2) not null default 0,
@@ -22,6 +24,7 @@ create table if not exists products (
 
 create table if not exists customers (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   name text not null,
   phone text default '',
   balance numeric(12,2) not null default 0,
@@ -31,6 +34,7 @@ create table if not exists customers (
 
 create table if not exists suppliers (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   name text not null,
   phone text default '',
   address text default '',
@@ -41,6 +45,7 @@ create table if not exists suppliers (
 
 create table if not exists sales (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   date timestamptz not null default now(),
   total numeric(12,2) not null default 0,
   subtotal numeric(12,2) not null default 0,
@@ -58,6 +63,7 @@ create table if not exists sales (
 
 create table if not exists sale_items (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   sale_id bigint not null references sales(id) on delete cascade,
   product_id bigint references products(id) on delete set null,
   product_name text not null,
@@ -69,6 +75,7 @@ create table if not exists sale_items (
 
 create table if not exists purchases (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   supplier_id bigint references suppliers(id) on delete set null,
   date timestamptz not null default now(),
   total_cost numeric(12,2) not null default 0,
@@ -78,6 +85,7 @@ create table if not exists purchases (
 
 create table if not exists purchase_items (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   purchase_id bigint not null references purchases(id) on delete cascade,
   product_id bigint references products(id) on delete set null,
   product_name text not null default '',
@@ -87,6 +95,7 @@ create table if not exists purchase_items (
 
 create table if not exists expenses (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   type text not null,
   amount numeric(12,2) not null default 0,
   date timestamptz not null default now(),
@@ -94,9 +103,12 @@ create table if not exists expenses (
   created_at timestamptz not null default now()
 );
 
+-- Settings: composite PK (user_id, key) for per-user settings
 create table if not exists settings (
-  key text primary key,
-  value text not null
+  key text not null,
+  user_id uuid not null references auth.users(id),
+  value text not null,
+  primary key (key, user_id)
 );
 
 -- ==================
@@ -105,18 +117,29 @@ create table if not exists settings (
 
 create table if not exists audit_logs (
   id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id),
   action text not null,
   table_name text not null,
   record_id bigint,
   old_data jsonb,
   new_data jsonb,
-  user_id uuid,
   created_at timestamptz not null default now()
 );
 
 -- ==================
 -- 3. INDEXES
 -- ==================
+
+create index if not exists idx_products_user on products(user_id);
+create index if not exists idx_customers_user on customers(user_id);
+create index if not exists idx_suppliers_user on suppliers(user_id);
+create index if not exists idx_sales_user on sales(user_id);
+create index if not exists idx_sale_items_user on sale_items(user_id);
+create index if not exists idx_purchases_user on purchases(user_id);
+create index if not exists idx_purchase_items_user on purchase_items(user_id);
+create index if not exists idx_expenses_user on expenses(user_id);
+create index if not exists idx_settings_user on settings(user_id);
+create index if not exists idx_audit_logs_user on audit_logs(user_id);
 
 create index if not exists idx_sales_date on sales(date);
 create index if not exists idx_sales_customer on sales(customer_id);
@@ -165,7 +188,7 @@ create trigger trg_purchase_items after insert or update or delete on purchase_i
 create trigger trg_expenses after insert or update or delete on expenses for each row execute function log_change();
 
 -- ==================
--- 5. RPC: create_sale (atomic)
+-- 5. RPC: create_sale (atomic, multi-tenant)
 -- ==================
 
 create or replace function create_sale(
@@ -183,6 +206,7 @@ declare
   v_profit numeric := 0;
   v_item_count integer := 0;
   v_item jsonb;
+  v_uid uuid := auth.uid();
 begin
   for v_item in select * from jsonb_array_elements(p_cart) loop
     v_subtotal := v_subtotal + (v_item->>'selling_price')::numeric * (v_item->>'quantity')::integer;
@@ -201,20 +225,20 @@ begin
   v_total := v_subtotal - v_discount_amount;
   v_profit := v_profit - v_discount_amount;
 
-  insert into sales (date, total, subtotal, discount_amount, discount_type, discount_value, profit, payment_method, refunded, customer_id, item_count)
-  values (now(), v_total, v_subtotal, v_discount_amount, p_discount_type, p_discount_value, v_profit, p_payment_method, false, p_customer_id, v_item_count)
+  insert into sales (user_id, date, total, subtotal, discount_amount, discount_type, discount_value, profit, payment_method, refunded, customer_id, item_count)
+  values (v_uid, now(), v_total, v_subtotal, v_discount_amount, p_discount_type, p_discount_value, v_profit, p_payment_method, false, p_customer_id, v_item_count)
   returning id into v_sale_id;
 
   for v_item in select * from jsonb_array_elements(p_cart) loop
-    insert into sale_items (sale_id, product_id, product_name, quantity, selling_price, cost_price, subtotal)
-    values (v_sale_id, (v_item->>'id')::bigint, v_item->>'name', (v_item->>'quantity')::integer, (v_item->>'selling_price')::numeric, coalesce((v_item->>'cost_price')::numeric,0), (v_item->>'selling_price')::numeric * (v_item->>'quantity')::integer);
+    insert into sale_items (user_id, sale_id, product_id, product_name, quantity, selling_price, cost_price, subtotal)
+    values (v_uid, v_sale_id, (v_item->>'id')::bigint, v_item->>'name', (v_item->>'quantity')::integer, (v_item->>'selling_price')::numeric, coalesce((v_item->>'cost_price')::numeric,0), (v_item->>'selling_price')::numeric * (v_item->>'quantity')::integer);
 
     update products set stock_quantity = greatest(0, stock_quantity - (v_item->>'quantity')::integer), updated_at = now()
-    where id = (v_item->>'id')::bigint;
+    where id = (v_item->>'id')::bigint and user_id = v_uid;
   end loop;
 
   if p_payment_method = 'Credit' and p_customer_id is not null then
-    update customers set balance = balance + v_total, updated_at = now() where id = p_customer_id;
+    update customers set balance = balance + v_total, updated_at = now() where id = p_customer_id and user_id = v_uid;
   end if;
 
   return jsonb_build_object('saleId', v_sale_id, 'total', v_total, 'profit', v_profit);
@@ -222,7 +246,7 @@ end;
 $$;
 
 -- ==================
--- 6. RPC: refund_sale (atomic)
+-- 6. RPC: refund_sale (atomic, multi-tenant)
 -- ==================
 
 create or replace function refund_sale(p_sale_id bigint)
@@ -230,19 +254,20 @@ returns boolean language plpgsql security definer as $$
 declare
   v_sale record;
   v_item record;
+  v_uid uuid := auth.uid();
 begin
-  select * into v_sale from sales where id = p_sale_id;
+  select * into v_sale from sales where id = p_sale_id and user_id = v_uid;
   if not found then raise exception 'Sale not found'; end if;
   if v_sale.refunded then raise exception 'Already refunded'; end if;
 
-  update sales set refunded = true where id = p_sale_id;
+  update sales set refunded = true where id = p_sale_id and user_id = v_uid;
 
-  for v_item in select * from sale_items where sale_id = p_sale_id loop
-    update products set stock_quantity = stock_quantity + v_item.quantity, updated_at = now() where id = v_item.product_id;
+  for v_item in select * from sale_items where sale_id = p_sale_id and user_id = v_uid loop
+    update products set stock_quantity = stock_quantity + v_item.quantity, updated_at = now() where id = v_item.product_id and user_id = v_uid;
   end loop;
 
   if v_sale.payment_method = 'Credit' and v_sale.customer_id is not null then
-    update customers set balance = greatest(0, balance - v_sale.total), updated_at = now() where id = v_sale.customer_id;
+    update customers set balance = greatest(0, balance - v_sale.total), updated_at = now() where id = v_sale.customer_id and user_id = v_uid;
   end if;
 
   return true;
@@ -250,7 +275,7 @@ end;
 $$;
 
 -- ==================
--- 7. RPC: undo_last_sale (atomic)
+-- 7. RPC: undo_last_sale (atomic, multi-tenant)
 -- ==================
 
 create or replace function undo_last_sale()
@@ -258,18 +283,19 @@ returns jsonb language plpgsql security definer as $$
 declare
   v_sale record;
   v_item record;
+  v_uid uuid := auth.uid();
 begin
-  select * into v_sale from sales where refunded = false and payment_method != 'Settle' order by date desc limit 1;
+  select * into v_sale from sales where refunded = false and payment_method != 'Settle' and user_id = v_uid order by date desc limit 1;
   if not found then return jsonb_build_object('success', false, 'message', 'No recent sale to undo'); end if;
 
-  update sales set refunded = true where id = v_sale.id;
+  update sales set refunded = true where id = v_sale.id and user_id = v_uid;
 
-  for v_item in select * from sale_items where sale_id = v_sale.id loop
-    update products set stock_quantity = stock_quantity + v_item.quantity, updated_at = now() where id = v_item.product_id;
+  for v_item in select * from sale_items where sale_id = v_sale.id and user_id = v_uid loop
+    update products set stock_quantity = stock_quantity + v_item.quantity, updated_at = now() where id = v_item.product_id and user_id = v_uid;
   end loop;
 
   if v_sale.payment_method = 'Credit' and v_sale.customer_id is not null then
-    update customers set balance = greatest(0, balance - v_sale.total), updated_at = now() where id = v_sale.customer_id;
+    update customers set balance = greatest(0, balance - v_sale.total), updated_at = now() where id = v_sale.customer_id and user_id = v_uid;
   end if;
 
   return jsonb_build_object('success', true, 'sale', to_jsonb(v_sale));
@@ -277,7 +303,7 @@ end;
 $$;
 
 -- ==================
--- 8. RPC: create_purchase (atomic)
+-- 8. RPC: create_purchase (atomic, multi-tenant)
 -- ==================
 
 create or replace function create_purchase(
@@ -289,24 +315,25 @@ declare
   v_purchase_id bigint;
   v_total_cost numeric := 0;
   v_item jsonb;
+  v_uid uuid := auth.uid();
 begin
   for v_item in select * from jsonb_array_elements(p_items) loop
     v_total_cost := v_total_cost + (v_item->>'quantity')::integer * (v_item->>'purchase_price')::numeric;
   end loop;
 
-  insert into purchases (supplier_id, date, total_cost, notes)
-  values (p_supplier_id, now(), v_total_cost, p_notes)
+  insert into purchases (user_id, supplier_id, date, total_cost, notes)
+  values (v_uid, p_supplier_id, now(), v_total_cost, p_notes)
   returning id into v_purchase_id;
 
   for v_item in select * from jsonb_array_elements(p_items) loop
-    insert into purchase_items (purchase_id, product_id, product_name, quantity, purchase_price)
-    values (v_purchase_id, (v_item->>'product_id')::bigint, v_item->>'product_name', (v_item->>'quantity')::integer, (v_item->>'purchase_price')::numeric);
+    insert into purchase_items (user_id, purchase_id, product_id, product_name, quantity, purchase_price)
+    values (v_uid, v_purchase_id, (v_item->>'product_id')::bigint, v_item->>'product_name', (v_item->>'quantity')::integer, (v_item->>'purchase_price')::numeric);
 
     update products set
       stock_quantity = stock_quantity + (v_item->>'quantity')::integer,
       cost_price = case when (v_item->>'purchase_price')::numeric > 0 then (v_item->>'purchase_price')::numeric else cost_price end,
       updated_at = now()
-    where id = (v_item->>'product_id')::bigint;
+    where id = (v_item->>'product_id')::bigint and user_id = v_uid;
   end loop;
 
   return jsonb_build_object('purchaseId', v_purchase_id, 'totalCost', v_total_cost);
@@ -314,26 +341,32 @@ end;
 $$;
 
 -- ==================
--- 9. RPC: delete_purchase (atomic, reverses stock)
+-- 9. RPC: delete_purchase (atomic, multi-tenant)
 -- ==================
 
 create or replace function delete_purchase(p_purchase_id bigint)
 returns boolean language plpgsql security definer as $$
 declare
   v_item record;
+  v_uid uuid := auth.uid();
 begin
-  for v_item in select * from purchase_items where purchase_id = p_purchase_id loop
-    update products set stock_quantity = greatest(0, stock_quantity - v_item.quantity), updated_at = now() where id = v_item.product_id;
+  -- Verify ownership
+  if not exists (select 1 from purchases where id = p_purchase_id and user_id = v_uid) then
+    raise exception 'Purchase not found';
+  end if;
+
+  for v_item in select * from purchase_items where purchase_id = p_purchase_id and user_id = v_uid loop
+    update products set stock_quantity = greatest(0, stock_quantity - v_item.quantity), updated_at = now() where id = v_item.product_id and user_id = v_uid;
   end loop;
 
-  delete from purchase_items where purchase_id = p_purchase_id;
-  delete from purchases where id = p_purchase_id;
+  delete from purchase_items where purchase_id = p_purchase_id and user_id = v_uid;
+  delete from purchases where id = p_purchase_id and user_id = v_uid;
   return true;
 end;
 $$;
 
 -- ==================
--- 10. RPC: quick_restock (atomic)
+-- 10. RPC: quick_restock (atomic, multi-tenant)
 -- ==================
 
 create or replace function quick_restock(
@@ -346,31 +379,32 @@ declare
   v_product record;
   v_purchase_id bigint;
   v_total numeric;
+  v_uid uuid := auth.uid();
 begin
-  select * into v_product from products where id = p_product_id;
+  select * into v_product from products where id = p_product_id and user_id = v_uid;
   if not found then raise exception 'Product not found'; end if;
 
   v_total := p_quantity * p_purchase_price;
 
-  insert into purchases (supplier_id, date, total_cost, notes)
-  values (p_supplier_id, now(), v_total, 'Quick restock: ' || v_product.name)
+  insert into purchases (user_id, supplier_id, date, total_cost, notes)
+  values (v_uid, p_supplier_id, now(), v_total, 'Quick restock: ' || v_product.name)
   returning id into v_purchase_id;
 
-  insert into purchase_items (purchase_id, product_id, product_name, quantity, purchase_price)
-  values (v_purchase_id, p_product_id, v_product.name, p_quantity, p_purchase_price);
+  insert into purchase_items (user_id, purchase_id, product_id, product_name, quantity, purchase_price)
+  values (v_uid, v_purchase_id, p_product_id, v_product.name, p_quantity, p_purchase_price);
 
   update products set
     stock_quantity = stock_quantity + p_quantity,
     cost_price = case when p_purchase_price > 0 then p_purchase_price else cost_price end,
     updated_at = now()
-  where id = p_product_id;
+  where id = p_product_id and user_id = v_uid;
 
   return jsonb_build_object('purchaseId', v_purchase_id, 'totalCost', v_total);
 end;
 $$;
 
 -- ==================
--- 11. ROW LEVEL SECURITY
+-- 11. ROW LEVEL SECURITY (per-user isolation)
 -- ==================
 
 alter table products enable row level security;
@@ -384,32 +418,60 @@ alter table expenses enable row level security;
 alter table settings enable row level security;
 alter table audit_logs enable row level security;
 
-create policy "auth_full" on products for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on customers for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on suppliers for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on sales for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on sale_items for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on purchases for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on purchase_items for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on expenses for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on settings for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "auth_full" on audit_logs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+-- Products
+create policy "products_select" on products for select using (auth.uid() = user_id);
+create policy "products_insert" on products for insert with check (auth.uid() = user_id);
+create policy "products_update" on products for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "products_delete" on products for delete using (auth.uid() = user_id);
 
--- ==================
--- 12. DEFAULT SETTINGS
--- ==================
+-- Customers
+create policy "customers_select" on customers for select using (auth.uid() = user_id);
+create policy "customers_insert" on customers for insert with check (auth.uid() = user_id);
+create policy "customers_update" on customers for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "customers_delete" on customers for delete using (auth.uid() = user_id);
 
-insert into settings (key, value) values
-  ('shop_name', 'My Shop'),
-  ('currency', '₹'),
-  ('low_stock_threshold', '5'),
-  ('receipt_template', '🧾 *{shop_name}*
-──────────────
-{items}
-──────────────
-*Total: {currency}{total}*
-Payment: {payment_method}
-Date: {date}
+-- Suppliers
+create policy "suppliers_select" on suppliers for select using (auth.uid() = user_id);
+create policy "suppliers_insert" on suppliers for insert with check (auth.uid() = user_id);
+create policy "suppliers_update" on suppliers for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "suppliers_delete" on suppliers for delete using (auth.uid() = user_id);
 
-Thank you for shopping with us! 🙏')
-on conflict (key) do nothing;
+-- Sales
+create policy "sales_select" on sales for select using (auth.uid() = user_id);
+create policy "sales_insert" on sales for insert with check (auth.uid() = user_id);
+create policy "sales_update" on sales for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "sales_delete" on sales for delete using (auth.uid() = user_id);
+
+-- Sale Items
+create policy "sale_items_select" on sale_items for select using (auth.uid() = user_id);
+create policy "sale_items_insert" on sale_items for insert with check (auth.uid() = user_id);
+create policy "sale_items_update" on sale_items for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "sale_items_delete" on sale_items for delete using (auth.uid() = user_id);
+
+-- Purchases
+create policy "purchases_select" on purchases for select using (auth.uid() = user_id);
+create policy "purchases_insert" on purchases for insert with check (auth.uid() = user_id);
+create policy "purchases_update" on purchases for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "purchases_delete" on purchases for delete using (auth.uid() = user_id);
+
+-- Purchase Items
+create policy "purchase_items_select" on purchase_items for select using (auth.uid() = user_id);
+create policy "purchase_items_insert" on purchase_items for insert with check (auth.uid() = user_id);
+create policy "purchase_items_update" on purchase_items for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "purchase_items_delete" on purchase_items for delete using (auth.uid() = user_id);
+
+-- Expenses
+create policy "expenses_select" on expenses for select using (auth.uid() = user_id);
+create policy "expenses_insert" on expenses for insert with check (auth.uid() = user_id);
+create policy "expenses_update" on expenses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "expenses_delete" on expenses for delete using (auth.uid() = user_id);
+
+-- Settings
+create policy "settings_select" on settings for select using (auth.uid() = user_id);
+create policy "settings_insert" on settings for insert with check (auth.uid() = user_id);
+create policy "settings_update" on settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "settings_delete" on settings for delete using (auth.uid() = user_id);
+
+-- Audit Logs (read-only for users, inserts done by trigger via security definer)
+create policy "audit_logs_select" on audit_logs for select using (auth.uid() = user_id);
+create policy "audit_logs_insert" on audit_logs for insert with check (auth.uid() = user_id);

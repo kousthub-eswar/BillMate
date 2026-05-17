@@ -1,5 +1,5 @@
-export { db, initializeSettings, getSetting, setSetting, getAllSettings, DEFAULT_SETTINGS } from './db';
-export { supabase } from './supabase';
+export { initializeSettings, getSetting, setSetting, getAllSettings, DEFAULT_SETTINGS } from './db';
+export { supabase, getCurrentUserId } from './supabase';
 
 export {
     getAllProducts, getProductById, addProduct, updateProduct,

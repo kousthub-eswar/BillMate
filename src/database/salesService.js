@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 
+// Note: createSale uses RPC which stamps user_id server-side
 export async function createSale(cart, paymentMethod, customerId = null, discount = null) {
     const { data, error } = await supabase.rpc('create_sale', {
         p_cart: cart.map(item => ({

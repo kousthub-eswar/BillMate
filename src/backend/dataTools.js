@@ -1,8 +1,8 @@
-import { supabase } from '../database/supabase';
+import { supabase, getCurrentUserId } from '../database/supabase';
 
 export async function exportAllData() {
     const tables = ['products', 'sales', 'sale_items', 'customers', 'suppliers', 'purchases', 'purchase_items', 'expenses', 'settings'];
-    const data = { version: 3, exportDate: new Date().toISOString() };
+    const data = { version: 4, exportDate: new Date().toISOString() };
 
     for (const table of tables) {
         const { data: rows } = await supabase.from(table).select('*');
@@ -21,6 +21,7 @@ export async function exportAllData() {
 export async function importAllData(jsonString) {
     try {
         const data = JSON.parse(jsonString);
+        const userId = await getCurrentUserId();
 
         if (!data.version || !data.products) {
             throw new Error('Invalid backup file format');
@@ -30,12 +31,12 @@ export async function importAllData(jsonString) {
         const clearOrder = ['sale_items', 'purchase_items', 'sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'settings'];
         for (const table of clearOrder) {
             await supabase.from(table).delete().neq('id', -1).catch(() => {
-                // settings table uses 'key' not 'id'
+                // settings table uses composite key
                 return supabase.from(table).delete().neq('key', '');
             });
         }
 
-        // Insert data - handle both old (saleItems) and new (sale_items) backup formats
+        // Insert data - stamp user_id on every row
         const insertMap = {
             products: data.products,
             customers: data.customers,
@@ -50,10 +51,10 @@ export async function importAllData(jsonString) {
 
         for (const [table, rows] of Object.entries(insertMap)) {
             if (rows?.length) {
-                // Remove auto-generated id fields for tables that use identity columns
                 const cleaned = rows.map(row => {
                     const { id, ...rest } = row;
-                    return table === 'settings' ? row : rest;
+                    const stamped = table === 'settings' ? { ...row, user_id: userId } : { ...rest, user_id: userId };
+                    return stamped;
                 });
                 await supabase.from(table).insert(cleaned);
             }

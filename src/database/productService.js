@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getCurrentUserId } from './supabase';
 
 export async function getAllProducts() {
     const { data, error } = await supabase.from('products').select('*').order('name');
@@ -12,7 +12,9 @@ export async function getProductById(id) {
 }
 
 export async function addProduct(product) {
+    const userId = await getCurrentUserId();
     const { data, error } = await supabase.from('products').insert({
+        user_id: userId,
         name: product.name.trim(),
         selling_price: parseFloat(product.selling_price) || 0,
         cost_price: parseFloat(product.cost_price) || 0,
@@ -31,6 +33,8 @@ export async function updateProduct(id, updates) {
     if (clean.cost_price !== undefined) clean.cost_price = parseFloat(clean.cost_price) || 0;
     if (clean.stock_quantity !== undefined) clean.stock_quantity = parseInt(clean.stock_quantity) || 0;
     if (clean.frequently_used !== undefined) clean.frequently_used = clean.frequently_used ? 1 : 0;
+    // Don't send user_id in update payload
+    delete clean.user_id;
     const { error } = await supabase.from('products').update(clean).eq('id', id);
     if (error) throw error;
 }

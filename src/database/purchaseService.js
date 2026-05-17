@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 
+// Note: createPurchase, deletePurchase, quickRestock all use RPCs that stamp user_id server-side
+
 export async function createPurchase(supplierId, items, notes = '') {
     const purchaseItems = items.map(item => ({
         product_id: item.product_id,

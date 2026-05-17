@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
     getTodayStats, getLowStockProducts, getTopSellingProducts,
     getSetting, getTodayExpenseTotal, undoLastSale,
-    getAllProducts, db
+    getAllProducts, supabase
 } from '../database';
 import {
     DollarSign,
@@ -16,7 +16,9 @@ import {
     Undo2,
     BarChart3,
     Activity,
-    PackageX
+    PackageX,
+    Package,
+    Users
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
@@ -63,8 +65,8 @@ export default function DashboardPage({ onNavigate }) {
     };
 
     const loadWeeklyRevenue = async () => {
-        const allSales = await db.sales.toArray();
-        const nonRefunded = allSales.filter(s => !s.refunded && s.payment_method !== 'Settle');
+        const { data: allSales } = await supabase.from('sales').select('*');
+        const nonRefunded = (allSales || []).filter(s => !s.refunded && s.payment_method !== 'Settle');
         const now = new Date();
         const days = [];
 
@@ -78,7 +80,7 @@ export default function DashboardPage({ onNavigate }) {
                 return d >= date && d < nextDate;
             });
 
-            const revenue = daySales.reduce((sum, s) => sum + s.total, 0);
+            const revenue = daySales.reduce((sum, s) => sum + Number(s.total), 0);
             days.push({
                 label: date.toLocaleDateString('en-IN', { weekday: 'short' }),
                 date: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
@@ -90,8 +92,8 @@ export default function DashboardPage({ onNavigate }) {
 
     const loadSlowMoving = async (threshold) => {
         const products = await getAllProducts();
-        const allSales = await db.sales.toArray();
-        const nonRefunded = allSales.filter(s => !s.refunded);
+        const { data: allSales } = await supabase.from('sales').select('*');
+        const nonRefunded = (allSales || []).filter(s => !s.refunded);
 
         const now = new Date();
         const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
@@ -99,8 +101,8 @@ export default function DashboardPage({ onNavigate }) {
             nonRefunded.filter(s => new Date(s.date) >= weekAgo).map(s => s.id)
         );
 
-        const saleItems = await db.saleItems.toArray();
-        const recentSaleItems = saleItems.filter(item => recentSaleIds.has(item.sale_id));
+        const { data: saleItems } = await supabase.from('sale_items').select('*');
+        const recentSaleItems = (saleItems || []).filter(item => recentSaleIds.has(item.sale_id));
 
         // Find products with stock > threshold but no recent sales
         const recentlySoldProductIds = new Set(recentSaleItems.map(i => i.product_id));
@@ -220,54 +222,69 @@ export default function DashboardPage({ onNavigate }) {
                 </button>
             </div>
 
-            {/* Quick Actions */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-                <button
-                    className="btn btn-primary"
-                    onClick={() => onNavigate('day-summary')}
-                    style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        padding: '12px 16px',
-                        fontSize: '0.82rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-md)',
-                        background: 'linear-gradient(135deg, var(--primary-500), var(--primary-600, #c88b20))',
-                        color: '#000',
-                        border: 'none',
-                        cursor: 'pointer'
-                    }}
-                    id="view-day-summary"
-                >
-                    <BarChart3 size={18} />
-                    View Day Summary
-                </button>
-                <button
-                    className="btn"
-                    onClick={() => setShowUndoConfirm(true)}
-                    style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        padding: '12px 16px',
-                        fontSize: '0.82rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-md)',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: 'var(--danger-400)',
-                        border: '1px solid rgba(239, 68, 68, 0.25)',
-                        cursor: 'pointer'
-                    }}
-                    id="undo-last-sale"
-                >
-                    <Undo2 size={18} />
-                    Undo Last Sale
-                </button>
+            {/* Quick Actions Grid */}
+            <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+                    Quick Actions
+                </div>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: 10
+                }}>
+                    {[
+                        { label: 'New Sale', icon: ShoppingCart, color: 'var(--accent-400)', bg: 'rgba(22, 163, 74, 0.1)', page: 'billing' },
+                        { label: 'Add Product', icon: Package, color: 'var(--primary-400)', bg: 'rgba(59, 130, 246, 0.1)', page: 'products' },
+                        { label: 'Add Expense', icon: Wallet, color: 'var(--danger-400)', bg: 'rgba(239, 68, 68, 0.1)', page: 'expenses' },
+                        { label: 'Day Summary', icon: BarChart3, color: 'var(--info-400)', bg: 'rgba(56, 189, 248, 0.1)', page: 'day-summary' },
+                        { label: 'Customers', icon: Users, color: 'var(--warning-500)', bg: 'rgba(245, 158, 11, 0.1)', page: 'customers' },
+                        { label: 'Undo Sale', icon: Undo2, color: 'var(--danger-400)', bg: 'rgba(239, 68, 68, 0.08)', action: () => setShowUndoConfirm(true) }
+                    ].map(({ label, icon: Icon, color, bg, page, action }) => (
+                        <button
+                            key={label}
+                            onClick={() => action ? action() : onNavigate(page)}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8,
+                                padding: '16px 8px',
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 'var(--radius-md)',
+                                cursor: 'pointer',
+                                minHeight: 72,
+                                transition: 'transform 120ms ease, box-shadow 120ms ease',
+                                fontFamily: 'Inter, sans-serif'
+                            }}
+                            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
+                            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                            id={`qa-${label.toLowerCase().replace(/\s/g, '-')}`}
+                        >
+                            <div style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 'var(--radius-sm)',
+                                background: bg,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: color
+                            }}>
+                                <Icon size={20} />
+                            </div>
+                            <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                color: 'var(--text-secondary)',
+                                textAlign: 'center',
+                                lineHeight: 1.2
+                            }}>{label}</span>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Stats Grid */}
@@ -282,10 +299,10 @@ export default function DashboardPage({ onNavigate }) {
 
                 <div className="stat-card">
                     <div className="stat-icon net-profit">
-                        <TrendingDown size={18} />
+                        {(stats.totalProfit - expenseTotal) >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                     </div>
                     <div className="stat-value" style={{ color: (stats.totalProfit - expenseTotal) >= 0 ? 'var(--accent-400)' : 'var(--danger-400)' }}>
-                        {formatCurrency(stats.totalProfit - expenseTotal)}
+                        {(stats.totalProfit - expenseTotal) >= 0 ? '↑ ' : '↓ '}{formatCurrency(Math.abs(stats.totalProfit - expenseTotal))}
                     </div>
                     <div className="stat-label">Net Profit</div>
                 </div>
@@ -302,8 +319,8 @@ export default function DashboardPage({ onNavigate }) {
                     <div className="stat-icon expenses">
                         <Wallet size={18} />
                     </div>
-                    <div className="stat-value" style={{ color: 'var(--danger-400)' }}>
-                        {formatCurrency(expenseTotal)}
+                    <div className="stat-value" style={{ color: expenseTotal > 0 ? 'var(--danger-400)' : 'var(--text-primary)' }}>
+                        {expenseTotal > 0 ? '↓ ' : ''}{formatCurrency(expenseTotal)}
                     </div>
                     <div className="stat-label">Expenses</div>
                 </div>
