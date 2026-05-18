@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, ShoppingCart, Package,
   Clock, Settings, Wallet, Users, Truck, ClipboardList,
-  Lock, Eye, EyeOff, KeyRound, CheckCircle
+  Lock, Eye, EyeOff, KeyRound, CheckCircle, MoreHorizontal, BarChart3, X
 } from 'lucide-react';
 import { initializeSettings } from './database';
 import { isAuthenticated, getSession, signOut, onAuthStateChange, updatePassword } from './backend/auth';
@@ -212,6 +212,7 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Listen for Supabase auth state changes
   useEffect(() => {
@@ -280,17 +281,16 @@ function App() {
     );
   }
 
-  const navItems = [
+  const bottomNavItems = [
     { key: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { key: 'products', label: 'Products', icon: Package },
-    { key: 'sales', label: 'Sales', icon: Clock },
     { key: 'billing', label: 'Bill', icon: ShoppingCart, isBilling: true },
-    { key: 'customers', label: 'Khata', icon: Users },
-    { key: 'suppliers', label: 'Suppliers', icon: Truck },
-    { key: 'purchases', label: 'Purchases', icon: ClipboardList },
-    { key: 'expenses', label: 'Expenses', icon: Wallet },
-    { key: 'settings', label: 'Settings', icon: Settings }
+    { key: 'sales', label: 'Sales', icon: Clock },
+    { key: 'more', label: 'More', icon: MoreHorizontal, isMore: true }
   ];
+
+  const mainKeys = ['dashboard', 'products', 'billing', 'sales'];
+  const isMoreActive = !mainKeys.includes(activePage);
 
   const renderPage = () => {
     switch (activePage) {
@@ -324,18 +324,141 @@ function App() {
         {renderPage()}
 
         <nav className="bottom-nav">
-          {navItems.map(({ key, label, icon: Icon, isBilling }) => (
-            <button
-              key={key}
-              className={`nav-item ${activePage === key ? 'active' : ''} ${isBilling ? 'billing-nav' : ''}`}
-              onClick={() => setActivePage(key)}
-              id={`nav-${key}`}
-            >
-              <Icon />
-              <span>{label}</span>
-            </button>
-          ))}
+          {bottomNavItems.map(({ key, label, icon: Icon, isBilling, isMore }) => {
+            const isActive = isMore ? isMoreActive : activePage === key;
+            return (
+              <button
+                key={key}
+                className={`nav-item ${isActive ? 'active' : ''} ${isBilling ? 'billing-nav' : ''}`}
+                onClick={() => {
+                  if (isMore) {
+                    setShowMoreMenu(true);
+                  } else {
+                    setActivePage(key);
+                  }
+                }}
+                id={`nav-${key}`}
+              >
+                <Icon />
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </nav>
+
+        {/* More Menu Drawer */}
+        {showMoreMenu && (
+          <div className="more-menu-overlay" onClick={() => setShowMoreMenu(false)}>
+            <div className="more-menu-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="more-menu-handle" />
+              <div className="more-menu-header">
+                <h3 className="more-menu-title">More Options</h3>
+                <button className="more-menu-close" onClick={() => setShowMoreMenu(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="more-menu-section">
+                <div className="more-menu-section-title">Business</div>
+                <div className="more-menu-grid">
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('customers');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-customers"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <Users size={20} />
+                    </div>
+                    <span className="more-menu-label">Khata</span>
+                  </button>
+
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('suppliers');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-suppliers"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <Truck size={20} />
+                    </div>
+                    <span className="more-menu-label">Suppliers</span>
+                  </button>
+
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('purchases');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-purchases"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <ClipboardList size={20} />
+                    </div>
+                    <span className="more-menu-label">Purchases</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="more-menu-section">
+                <div className="more-menu-section-title">Finance</div>
+                <div className="more-menu-grid">
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('expenses');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-expenses"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <Wallet size={20} />
+                    </div>
+                    <span className="more-menu-label">Expenses</span>
+                  </button>
+
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('day-summary');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-day-summary"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <BarChart3 size={20} />
+                    </div>
+                    <span className="more-menu-label">Day Summary</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="more-menu-section">
+                <div className="more-menu-section-title">System</div>
+                <div className="more-menu-grid">
+                  <button
+                    className="more-menu-item"
+                    onClick={() => {
+                      setActivePage('settings');
+                      setShowMoreMenu(false);
+                    }}
+                    id="more-settings"
+                  >
+                    <div className="more-menu-icon-wrapper">
+                      <Settings size={20} />
+                    </div>
+                    <span className="more-menu-label">Settings</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ToastProvider>
   );

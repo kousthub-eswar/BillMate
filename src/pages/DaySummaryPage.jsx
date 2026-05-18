@@ -78,31 +78,89 @@ export default function DaySummaryPage({ onBack }) {
     return (
         <div className="page-content">
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                <button
-                    className="btn btn-ghost btn-icon"
-                    onClick={onBack}
-                    style={{ flexShrink: 0 }}
-                    id="day-summary-back"
-                >
-                    <ArrowLeft size={22} />
-                </button>
-                <div>
-                    <h1 style={{
-                        fontSize: '1.4rem',
-                        fontWeight: 800,
-                        background: 'linear-gradient(135deg, var(--primary-300), var(--primary-500))',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        letterSpacing: '-0.02em',
-                        margin: 0
-                    }}>
-                        Day Summary
-                    </h1>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 500, marginTop: 2 }}>
-                        {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                        className="btn btn-ghost btn-icon"
+                        onClick={onBack}
+                        style={{ flexShrink: 0 }}
+                        id="day-summary-back"
+                    >
+                        <ArrowLeft size={22} />
+                    </button>
+                    <div>
+                        <h1 style={{
+                            fontSize: '1.4rem',
+                            fontWeight: 800,
+                            background: 'linear-gradient(135deg, var(--primary-300), var(--primary-500))',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            letterSpacing: '-0.02em',
+                            margin: 0
+                        }}>
+                            Day Summary
+                        </h1>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 500, marginTop: 2 }}>
+                            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
                     </div>
                 </div>
+                <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                        const printWindow = window.open('', '_blank');
+                        printWindow.document.write(`
+                            <html>
+                                <head>
+                                    <title>Day Summary Report</title>
+                                    <style>
+                                        body {
+                                            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                                            padding: 40px;
+                                            max-width: 600px;
+                                            margin: 0 auto;
+                                            color: #09090b;
+                                            background: #fff;
+                                        }
+                                        h1 { font-size: 24px; font-weight: 800; border-bottom: 2px solid #09090b; padding-bottom: 8px; margin-bottom: 24px; }
+                                        .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e4e4e7; font-size: 14px; }
+                                        .row.total { font-weight: 800; font-size: 18px; border-top: 2px solid #09090b; border-bottom: none; margin-top: 16px; }
+                                        .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #71717a; margin-top: 32px; margin-bottom: 12px; letter-spacing: 0.5px; }
+                                        .badge { font-weight: 600; }
+                                        @media print {
+                                            body { padding: 0; }
+                                        }
+                                    </style>
+                                </head>
+                                <body onload="window.print(); window.close();">
+                                    <h1>BillMate Day Summary</h1>
+                                    <div style="font-size: 12px; color: #71717a; margin-bottom: 24px;">
+                                        Date: ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </div>
+                                    
+                                    <div class="section-title">Financial Performance</div>
+                                    <div class="row"><span>Total Revenue</span><span class="badge">${currency}${stats.totalRevenue.toFixed(2)}</span></div>
+                                    <div class="row"><span>Product Profit</span><span class="badge">${currency}${stats.totalProfit.toFixed(2)}</span></div>
+                                    <div class="row"><span>Total Expenses</span><span class="badge" style="color: #ef4444;">-${currency}${expenseTotal.toFixed(2)}</span></div>
+                                    <div class="row total"><span>Net Profit</span><span>${currency}${netProfit.toFixed(2)}</span></div>
+                                    
+                                    <div class="section-title">Transaction Summary</div>
+                                    <div class="row"><span>Total Transactions</span><span>${stats.transactionCount}</span></div>
+                                    <div class="row"><span>Cash Received</span><span>${currency}${cashReceived.toFixed(2)}</span></div>
+                                    <div class="row"><span>UPI Received</span><span>${currency}${upiReceived.toFixed(2)}</span></div>
+                                    
+                                    <div class="section-title">Highlights</div>
+                                    <div class="row"><span>Top Selling Product</span><span>${topProduct ? `${topProduct.name} (${topProduct.quantity} units)` : 'No sales data'}</span></div>
+                                    <div class="row"><span>Low Stock Warning</span><span style="${lowStock.length > 0 ? 'color: #f59e0b; font-weight: 700;' : ''}">${lowStock.length} items low</span></div>
+                                </body>
+                            </html>
+                        `);
+                        printWindow.document.close();
+                    }}
+                    id="print-summary-btn"
+                >
+                    Print Report
+                </button>
             </div>
 
             {/* Revenue Card - Hero */}

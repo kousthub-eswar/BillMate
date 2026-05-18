@@ -124,6 +124,7 @@ export default function SettingsPage({ onLogout }) {
             shop_name: 'Shop Name',
             currency: 'Currency Symbol',
             low_stock_threshold: 'Low Stock Threshold',
+            upi_id: 'UPI Address / ID',
             receipt_template: 'Receipt Template'
         };
         return labels[key] || key;
@@ -134,6 +135,7 @@ export default function SettingsPage({ onLogout }) {
             shop_name: 'Displayed on receipts and dashboard',
             currency: 'Currency symbol used throughout the app',
             low_stock_threshold: 'Alert when stock falls below this number',
+            upi_id: 'Used to generate custom scan-to-pay QR codes during UPI checkout (e.g. shop@upi)',
             receipt_template: 'WhatsApp receipt message format'
         };
         return descs[key] || '';
@@ -144,6 +146,7 @@ export default function SettingsPage({ onLogout }) {
             shop_name: Store,
             currency: DollarSign,
             low_stock_threshold: AlertTriangle,
+            upi_id: Smartphone,
             receipt_template: MessageSquare
         };
         const Icon = icons[key] || FileText;
@@ -217,7 +220,7 @@ export default function SettingsPage({ onLogout }) {
                             height: '24px',
                             borderRadius: '50%',
                             background: theme === 'dark'
-                                ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)'
+                               ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)'
                                 : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                             boxShadow: theme === 'dark'
                                 ? '0 2px 8px rgba(56, 189, 248, 0.4)'
@@ -240,7 +243,7 @@ export default function SettingsPage({ onLogout }) {
             <div className="settings-group">
                 <div className="settings-group-title">Shop Settings</div>
 
-                {['shop_name', 'currency', 'low_stock_threshold'].map(key => (
+                {['shop_name', 'currency', 'low_stock_threshold', 'upi_id'].map(key => (
                     <div key={key} className="settings-item" onClick={() => openEdit(key, settings[key])}>
                         <div className="settings-item-icon">
                             {getSettingIcon(key)}

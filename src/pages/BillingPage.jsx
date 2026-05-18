@@ -3,17 +3,78 @@ import {
     Search, Plus, Minus, Trash2, ShoppingBag,
     CreditCard, Smartphone, Banknote, ChevronRight,
     X, MessageCircle, Package, AlertTriangle, Users, Scan,
-    Percent, Tag, ChevronDown, ChevronUp
+    Percent, Tag, ChevronDown, ChevronUp, Terminal
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
     searchProducts, getFrequentProducts, createSale,
     getSaleById, getAllSettings, getAllCustomers,
-    addProduct, getCategories
+    addProduct, getCategories, getCustomerHistory
 } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
+
+function generateEscPosStream(sale, items, settings) {
+    const stream = [];
+    const addCmd = (cmd, desc, hex) => stream.push({ cmd, desc, hex });
+
+    addCmd('ESC @', 'Initialize printer', '1B 40');
+    addCmd('ESC a 01', 'Align Center', '1B 61 01');
+    addCmd('GS ! 11', 'Double Font Size (Header)', '1D 21 11');
+    addCmd('TEXT', `${settings.shop_name || 'BillMate'}`, Array.from(new TextEncoder().encode(settings.shop_name || 'BillMate')).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+    addCmd('LF', 'Line feed', '0A');
+    addCmd('GS ! 00', 'Reset Font Size', '1D 21 00');
+    addCmd('LF', 'Line feed', '0A');
+    addCmd('ESC a 00', 'Align Left', '1B 61 00');
+    addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
+    addCmd('LF', 'Line feed', '0A');
+
+    items.forEach(item => {
+        const text = `${item.product_name || item.name} x${item.quantity} = ${settings.currency || '₹'}${Number(item.subtotal || item.selling_price * item.quantity).toFixed(2)}`;
+        addCmd('TEXT', text, Array.from(new TextEncoder().encode(text)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+        addCmd('LF', 'Line feed', '0A');
+    });
+
+    addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
+    addCmd('LF', 'Line feed', '0A');
+
+    if (sale.discount_amount > 0) {
+        const subtext = `Subtotal: ${settings.currency || '₹'}${Number(sale.subtotal || (sale.total + sale.discount_amount)).toFixed(2)}`;
+        addCmd('TEXT', subtext, Array.from(new TextEncoder().encode(subtext)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+        addCmd('LF', 'Line feed', '0A');
+        
+        const discText = `Discount: -${settings.currency || '₹'}${Number(sale.discount_amount).toFixed(2)}`;
+        addCmd('TEXT', discText, Array.from(new TextEncoder().encode(discText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+        addCmd('LF', 'Line feed', '0A');
+        addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
+        addCmd('LF', 'Line feed', '0A');
+    }
+
+    addCmd('GS ! 01', 'Double Width Font (Total)', '1D 21 01');
+    const totalText = `TOTAL: ${settings.currency || '₹'}${Number(sale.total).toFixed(2)}`;
+    addCmd('TEXT', totalText, Array.from(new TextEncoder().encode(totalText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+    addCmd('LF', 'Line feed', '0A');
+    addCmd('GS ! 00', 'Reset Font Size', '1D 21 00');
+    addCmd('LF', 'Line feed', '0A');
+
+    const paymentText = `Payment: ${sale.payment_method}`;
+    addCmd('TEXT', paymentText, Array.from(new TextEncoder().encode(paymentText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+    addCmd('LF', 'Line feed', '0A');
+
+    const dateText = `Date: ${new Date(sale.date).toLocaleString()}`;
+    addCmd('TEXT', dateText, Array.from(new TextEncoder().encode(dateText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
+    addCmd('LF', 'Line feed', '0A');
+
+    addCmd('LF', 'Line feed', '0A');
+    addCmd('ESC a 01', 'Align Center', '1B 61 01');
+    addCmd('TEXT', 'Thank you! Please visit again.', '54 68 61 6E 6B 20 79 6F 75 21 20 50 6C 65 61 73 65 20 76 69 73 69 74 20 61 67 61 69 6E 2E');
+    addCmd('LF', 'Line feed', '0A');
+
+    addCmd('GS V 41 03', 'Cut paper (Full Cut)', '1D 56 41 03');
+
+    return stream;
+}
 
 export default function BillingPage() {
     const [query, setQuery] = useState('');
@@ -24,6 +85,8 @@ export default function BillingPage() {
     const [showReceipt, setShowReceipt] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
     const [receiptText, setReceiptText] = useState('');
+    const [showTelemetry, setShowTelemetry] = useState(false);
+    const [activeSaleRecord, setActiveSaleRecord] = useState(null);
     const [customerPhone, setCustomerPhone] = useState('');
     const [settings, setSettings] = useState({});
     const [lowStockThreshold, setLowStockThreshold] = useState(5);
@@ -31,6 +94,11 @@ export default function BillingPage() {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
     const showToast = useToast();
+
+    // Loyalty points states
+    const [customerLoyaltyPoints, setCustomerLoyaltyPoints] = useState(0);
+    const [customerLoyaltyTier, setCustomerLoyaltyTier] = useState('Bronze');
+    const [redeemPoints, setRedeemPoints] = useState(false);
 
     // Discount state
     const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percent'
@@ -70,6 +138,43 @@ export default function BillingPage() {
     const loadCustomers = async () => {
         const c = await getAllCustomers();
         setCustomers(c);
+    };
+
+    const loadCustomerLoyalty = async (customer) => {
+        if (!customer) {
+            setCustomerLoyaltyPoints(0);
+            setCustomerLoyaltyTier('Bronze');
+            setRedeemPoints(false);
+            return;
+        }
+        try {
+            const history = await getCustomerHistory(customer.id);
+            
+            // Accrued points = 1% of total spent
+            const accrued = history.reduce((sum, sale) => {
+                if (sale.refunded || sale.payment_method === 'Settle') return sum;
+                return sum + Math.floor(Number(sale.total) * 0.01);
+            }, 0);
+
+            // Redeemed points = sum of discounts where type is 'Loyalty'
+            const redeemed = history.reduce((sum, sale) => {
+                if (sale.refunded || sale.payment_method === 'Settle') return sum;
+                if (sale.discount_type === 'Loyalty') return sum + Number(sale.discount_value);
+                return sum;
+            }, 0);
+
+            const netPoints = Math.max(0, accrued - redeemed);
+            setCustomerLoyaltyPoints(netPoints);
+
+            let tier = 'Bronze';
+            if (netPoints >= 1500) tier = 'Platinum';
+            else if (netPoints >= 500) tier = 'Gold';
+            else if (netPoints >= 100) tier = 'Silver';
+
+            setCustomerLoyaltyTier(tier);
+        } catch (err) {
+            console.error('Failed to load customer loyalty points:', err);
+        }
     };
 
     useEffect(() => {
@@ -179,20 +284,34 @@ export default function BillingPage() {
             discountAmount = Math.min(parsedDiscount, cartSubtotal);
         }
     }
-    const cartTotal = cartSubtotal - discountAmount;
+
+    // Loyalty points redemption discount
+    const loyaltyDiscountAmount = redeemPoints ? Math.min(customerLoyaltyPoints, cartSubtotal - discountAmount) : 0;
+
+    const cartTotal = Math.max(0, cartSubtotal - discountAmount - loyaltyDiscountAmount);
 
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
         try {
-            const discountObj = discountAmount > 0
-                ? { type: discountType, value: parsedDiscount, amount: discountAmount }
-                : null;
+            let finalDiscountObj = null;
+            if (discountAmount > 0) {
+                finalDiscountObj = { type: discountType, value: parsedDiscount, amount: discountAmount };
+            }
 
-            const result = await createSale(cart, paymentMethod, selectedCustomer?.id, discountObj);
+            if (redeemPoints && loyaltyDiscountAmount > 0) {
+                finalDiscountObj = {
+                    type: 'Loyalty',
+                    value: (finalDiscountObj?.amount || 0) + loyaltyDiscountAmount,
+                    amount: (finalDiscountObj?.amount || 0) + loyaltyDiscountAmount
+                };
+            }
+
+            const result = await createSale(cart, paymentMethod, selectedCustomer?.id, finalDiscountObj);
             const sale = await getSaleById(result.saleId);
             const receipt = generateReceipt(sale, sale.items, settings);
 
+            setActiveSaleRecord(sale);
             setReceiptText(receipt);
             setShowCheckout(false);
             setShowReceipt(true);
@@ -202,6 +321,8 @@ export default function BillingPage() {
             setDiscountValue('');
             setShowDiscount(false);
             setCartOpen(false);
+            setRedeemPoints(false);
+            setCustomerLoyaltyPoints(0);
             showToast('Sale completed!');
             loadFrequent();
         } catch (_err) {
@@ -600,7 +721,10 @@ export default function BillingPage() {
                                     onChange={(e) => {
                                         const c = customers.find(c => c.id === parseInt(e.target.value));
                                         setSelectedCustomer(c || null);
-                                        if (e.target.value === '') setPaymentMethod('Cash');
+                                        loadCustomerLoyalty(c || null);
+                                        if (e.target.value === '') {
+                                            setPaymentMethod('Cash');
+                                        }
                                     }}
                                     style={{ appearance: 'none' }}
                                 >
@@ -615,16 +739,87 @@ export default function BillingPage() {
                             </div>
                         </div>
 
+                        {/* Customer Loyalty Points Engine UI */}
+                        {selectedCustomer && (
+                            <div style={{
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 12,
+                                padding: 12,
+                                marginBottom: 20,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                        Loyalty Rewards
+                                    </span>
+                                    <span style={{
+                                        fontSize: '0.7rem',
+                                        fontWeight: 800,
+                                        padding: '2px 8px',
+                                        borderRadius: 12,
+                                        background: customerLoyaltyTier === 'Platinum' ? 'linear-gradient(135deg, #e2e8f0, #94a3b8)' : 
+                                                    customerLoyaltyTier === 'Gold' ? 'linear-gradient(135deg, #fbbf24, #d97706)' : 
+                                                    customerLoyaltyTier === 'Silver' ? 'linear-gradient(135deg, #cbd5e1, #64748b)' : 
+                                                    'linear-gradient(135deg, #b45309, #78350f)',
+                                        color: '#000',
+                                        textTransform: 'uppercase'
+                                    }}>
+                                        {customerLoyaltyTier} Tier
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        Available Balance:
+                                    </span>
+                                    <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary-400)' }}>
+                                        {customerLoyaltyPoints} points
+                                    </span>
+                                </div>
+                                {customerLoyaltyPoints > 0 && (
+                                    <label style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        marginTop: 4,
+                                        padding: '8px 10px',
+                                        background: redeemPoints ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                                        borderRadius: 8,
+                                        border: redeemPoints ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        transition: 'all 0.2s ease'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={redeemPoints}
+                                            onChange={(e) => setRedeemPoints(e.target.checked)}
+                                            style={{
+                                                width: 16,
+                                                height: 16,
+                                                accentColor: 'var(--primary-500)',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            Redeem {Math.min(customerLoyaltyPoints, Math.floor(cartSubtotal - discountAmount))} points (Save {formatCurrency(Math.min(customerLoyaltyPoints, Math.floor(cartSubtotal - discountAmount)))})
+                                        </span>
+                                    </label>
+                                )}
+                            </div>
+                        )}
+
                         <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>
                             Payment Method
                         </div>
-                        <div className="payment-methods">
+                        <div className="payment-methods" style={{ marginBottom: paymentMethod === 'UPI' ? 12 : 24 }}>
                             {[
                                 { method: 'Cash', icon: Banknote },
                                 { method: 'UPI', icon: Smartphone },
                                 { method: 'Card', icon: CreditCard },
                                 { method: 'Credit', icon: Users, disabled: !selectedCustomer }
-                                // eslint-disable-next-line no-unused-vars
                             ].map(({ method, icon: Icon, disabled }) => (
                                 <button
                                     key={method}
@@ -638,6 +833,48 @@ export default function BillingPage() {
                                 </button>
                             ))}
                         </div>
+
+                        {/* Dynamic UPI QR Code during Checkout */}
+                        {paymentMethod === 'UPI' && (
+                            <div style={{
+                                textAlign: 'center',
+                                margin: '0 0 20px 0',
+                                padding: '16px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                borderRadius: 16,
+                                border: '1px solid var(--border-color)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: 10
+                            }}>
+                                <div style={{
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    color: 'var(--primary-400)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                }}>
+                                    Scan & Pay {formatCurrency(cartTotal)}
+                                </div>
+                                <div style={{
+                                    background: '#fff',
+                                    padding: 10,
+                                    display: 'inline-block',
+                                    borderRadius: 12,
+                                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+                                }}>
+                                    <img
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${settings.upi_id || 'merchant@upi'}&pn=${encodeURIComponent(settings.shop_name || 'BillMate')}&am=${cartTotal.toFixed(2)}&tn=Sale_${Date.now()}`)}`}
+                                        alt="UPI QR Code"
+                                        style={{ width: 140, height: 140, display: 'block' }}
+                                    />
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    VPA: {settings.upi_id || 'merchant@upi'}
+                                </div>
+                            </div>
+                        )}
 
                         <button
                             className="btn btn-success btn-lg btn-block"
@@ -671,35 +908,181 @@ export default function BillingPage() {
 
                             <div className="receipt-preview">
                                 {receiptText}
-                            </div>
+                                {/* Dynamic UPI QR Code */}
+                                {paymentMethod === 'UPI' && activeSaleRecord && (
+                                    <div style={{ 
+                                        textAlign: 'center', 
+                                        margin: '16px 0', 
+                                        padding: '16px 12px', 
+                                        background: 'rgba(255, 255, 255, 0.02)', 
+                                        borderRadius: 12, 
+                                        border: '1px solid var(--border-color)' 
+                                    }}>
+                                        <div style={{ 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 700, 
+                                            color: 'var(--primary-400)', 
+                                            textTransform: 'uppercase', 
+                                            letterSpacing: '0.5px', 
+                                            marginBottom: 10 
+                                        }}>
+                                            Scan to Pay via UPI
+                                        </div>
+                                        <div style={{ 
+                                            background: '#fff', 
+                                            padding: 8, 
+                                            display: 'inline-block', 
+                                            borderRadius: 8, 
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)' 
+                                        }}>
+                                            <img 
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${settings.upi_id || 'merchant@upi'}&pn=${encodeURIComponent(settings.shop_name || 'BillMate')}&am=${Number(activeSaleRecord.total).toFixed(2)}&tn=Invoice_${activeSaleRecord.id}`)}`} 
+                                                alt="UPI QR Code" 
+                                                style={{ width: 150, height: 150, display: 'block' }}
+                                            />
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
+                                            Amount: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatCurrency(activeSaleRecord.total)}</span>
+                                        </div>
+                                    </div>
+                                )}
 
-                            <div className="form-group">
-                                <label className="form-label">Customer Phone (for WhatsApp)</label>
-                                <div className="phone-input-group">
-                                    <input
-                                        className="form-input"
-                                        type="tel"
-                                        placeholder="e.g. 919876543210"
-                                        value={customerPhone}
-                                        onChange={(e) => setCustomerPhone(e.target.value)}
-                                        id="customer-phone"
-                                    />
-                                    <button
-                                        className="btn btn-success"
-                                        onClick={handleShareWhatsApp}
-                                        disabled={!customerPhone.trim()}
-                                    >
-                                        <MessageCircle size={18} />
-                                    </button>
+                                <div className="form-group">
+                                    <label className="form-label">Customer Phone (for WhatsApp)</label>
+                                    <div className="phone-input-group">
+                                        <input
+                                            className="form-input"
+                                            type="tel"
+                                            placeholder="e.g. 919876543210"
+                                            value={customerPhone}
+                                            onChange={(e) => setCustomerPhone(e.target.value)}
+                                            id="customer-phone"
+                                        />
+                                        <button
+                                            className="btn btn-success"
+                                            onClick={handleShareWhatsApp}
+                                            disabled={!customerPhone.trim()}
+                                        >
+                                            <MessageCircle size={18} />
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <button
-                                className="btn btn-primary btn-block"
-                                onClick={() => { setShowReceipt(false); setCustomerPhone(''); }}
-                            >
-                                Done
-                            </button>
+                                <button
+                                    className="btn btn-secondary btn-block"
+                                    onClick={() => {
+                                        const printWindow = window.open('', '_blank');
+                                        printWindow.document.write(`
+                                            <html>
+                                                <head>
+                                                    <title>Print Receipt</title>
+                                                    <style>
+                                                        body {
+                                                            font-family: 'Courier New', Courier, monospace;
+                                                            padding: 20px;
+                                                            width: 280px;
+                                                            margin: 0 auto;
+                                                            color: #000;
+                                                            background: #fff;
+                                                        }
+                                                        pre {
+                                                            white-space: pre-wrap;
+                                                            font-size: 13px;
+                                                            line-height: 1.4;
+                                                            margin: 0;
+                                                        }
+                                                        @media print {
+                                                            body { width: 100%; padding: 0; }
+                                                        }
+                                                    </style>
+                                                </head>
+                                                <body onload="window.print(); window.close();">
+                                                    <pre>${receiptText}</pre>
+                                                </body>
+                                            </html>
+                                        `);
+                                        printWindow.document.close();
+                                    }}
+                                    style={{ marginBottom: 8 }}
+                                    id="print-thermal-receipt"
+                                >
+                                    Print Receipt (Thermal)
+                                </button>
+
+                                <button
+                                    className="btn btn-block"
+                                    onClick={() => setShowTelemetry(!showTelemetry)}
+                                    style={{
+                                        marginBottom: 8,
+                                        background: 'var(--bg-tertiary)',
+                                        color: 'var(--text-secondary)',
+                                        border: '1px solid var(--border-color)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        fontWeight: 700
+                                    }}
+                                >
+                                    <Terminal size={16} style={{ color: 'var(--primary-400)' }} />
+                                    {showTelemetry ? 'Hide' : 'Show'} ESC/POS Telemetry Log
+                                </button>
+
+                                {showTelemetry && activeSaleRecord && (
+                                    <div style={{
+                                        marginTop: 12,
+                                        marginBottom: 16,
+                                        background: '#0a0f1d',
+                                        border: '1px solid #1e293b',
+                                        borderRadius: 12,
+                                        padding: 12,
+                                        textAlign: 'left',
+                                        maxHeight: 240,
+                                        overflowY: 'auto',
+                                        fontFamily: 'Courier New, monospace'
+                                    }}>
+                                        <div style={{
+                                            fontSize: '0.72rem',
+                                            fontWeight: 800,
+                                            color: '#38bdf8',
+                                            borderBottom: '1px solid #1e293b',
+                                            paddingBottom: 6,
+                                            marginBottom: 8,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.5px'
+                                        }}>
+                                            💻 Raw ESC/POS Print Stream
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.7rem' }}>
+                                            {generateEscPosStream(activeSaleRecord, activeSaleRecord.items || cart, settings).map((log, index) => (
+                                                <div key={index} style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: 2,
+                                                    padding: '4px',
+                                                    background: 'rgba(255, 255, 255, 0.01)',
+                                                    borderRadius: 4
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
+                                                        <span style={{ fontWeight: 800, color: '#f43f5e' }}>[{log.cmd}]</span>
+                                                        <span style={{ color: '#10b981' }}>{log.desc}</span>
+                                                    </div>
+                                                    <div style={{ color: '#e4e4e7', wordBreak: 'break-all' }}>
+                                                        HEX: <span style={{ color: '#fbbf24' }}>{log.hex}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button
+                                    className="btn btn-primary btn-block"
+                                    onClick={() => { setShowReceipt(false); setCustomerPhone(''); setShowTelemetry(false); setActiveSaleRecord(null); }}
+                                >
+                                    Done
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )

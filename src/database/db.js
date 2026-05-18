@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
     shop_name: 'My Shop',
     currency: '₹',
     low_stock_threshold: 5,
+    upi_id: 'merchant@upi',
     receipt_template: `🧾 *{shop_name}*\n──────────────\n{items}\n──────────────\n*Total: {currency}{total}*\nPayment: {payment_method}\nDate: {date}\n\nThank you for shopping with us! 🙏`
 };
 
