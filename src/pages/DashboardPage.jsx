@@ -401,138 +401,6 @@ export default function DashboardPage({ onNavigate }) {
                 </div>
             </div>
 
-            {/* Predictive BI Diagnostics Panel */}
-            <div className="dashboard-section">
-                <div className="dashboard-section-header">
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Activity size={16} style={{ color: 'var(--primary-400)' }} />
-                        Predictive BI Diagnostics
-                    </h3>
-                    <span style={{
-                        fontSize: '0.65rem',
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        color: 'var(--primary-400)',
-                        borderRadius: 12,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                    }}>
-                        AI Forecasting Active
-                    </span>
-                </div>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr',
-                    gap: 12,
-                    marginBottom: 8
-                }}>
-                    {/* Forecast Card */}
-                    <div style={{
-                        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.4))',
-                        backdropFilter: 'blur(20px)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 'var(--radius-md)',
-                        padding: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 12
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                Tomorrow's Revenue Forecast
-                            </span>
-                            <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                color: forecasting.trend === 'up' ? 'var(--accent-400)' : forecasting.trend === 'down' ? 'var(--danger-400)' : 'var(--text-muted)'
-                            }}>
-                                {forecasting.trend === 'up' ? <TrendingUp size={14} /> : forecasting.trend === 'down' ? <TrendingDown size={14} /> : null}
-                                {forecasting.trend === 'up' ? 'Rising Trend (+12%)' : forecasting.trend === 'down' ? 'Declining Trend (-12%)' : 'Stable Trend'}
-                            </span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                            <span style={{
-                                fontSize: '1.8rem',
-                                fontWeight: 900,
-                                background: 'linear-gradient(135deg, #fff, var(--primary-300))',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                letterSpacing: '-0.02em'
-                            }}>
-                                {formatCurrency(forecasting.nextDayRevenue)}
-                            </span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                Based on 7-day rolling sales velocity
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Replenishment Recommendations */}
-                    {forecasting.replenishment.length > 0 && (
-                        <div style={{
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: 'var(--radius-md)',
-                            padding: '16px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 12
-                        }}>
-                            <div style={{
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                color: 'var(--text-secondary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6
-                            }}>
-                                <AlertTriangle size={14} style={{ color: 'var(--warning-400)' }} />
-                                Automated Replenishment & Supply Chain Suggestions
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {forecasting.replenishment.slice(0, 3).map(item => (
-                                    <div key={item.id} style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        paddingBottom: 8,
-                                        borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-                                        fontSize: '0.8rem'
-                                    }}>
-                                        <div>
-                                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{item.name}</div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                                                Sales Velocity: {item.velocity.toFixed(2)} units/day
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{
-                                                fontSize: '0.78rem',
-                                                fontWeight: 800,
-                                                color: 'var(--warning-400)',
-                                                background: 'rgba(245, 158, 11, 0.08)',
-                                                padding: '2px 8px',
-                                                borderRadius: 6,
-                                                border: '1px solid rgba(245, 158, 11, 0.2)',
-                                                display: 'inline-block'
-                                            }}>
-                                                Restock +{item.suggested} units
-                                            </div>
-                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                                                covers 14-day supply
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
 
             {/* Weekly Revenue Trend */}
             <div className="dashboard-section">
@@ -614,12 +482,33 @@ export default function DashboardPage({ onNavigate }) {
                         All items well stocked 👍
                     </div>
                 ) : (
-                    lowStock.slice(0, 5).map(item => (
-                        <div key={item.id} className="low-stock-item">
-                            <span className="product-name">{item.name}</span>
-                            <span className="stock-count">{item.stock_quantity} left</span>
-                        </div>
-                    ))
+                    lowStock.slice(0, 5).map(item => {
+                        const suggestion = forecasting.replenishment.find(s => s.id === item.id);
+                        return (
+                            <div key={item.id} className="low-stock-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span className="product-name" style={{ fontWeight: 600 }}>{item.name}</span>
+                                    <span className="stock-count" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                        {item.stock_quantity} remaining
+                                    </span>
+                                </div>
+                                {suggestion && suggestion.suggested > 0 && (
+                                    <span style={{
+                                        fontSize: '0.68rem',
+                                        fontWeight: 700,
+                                        color: 'var(--warning-400)',
+                                        background: 'rgba(245, 158, 11, 0.08)',
+                                        padding: '2px 8px',
+                                        borderRadius: 6,
+                                        border: '1px solid rgba(245, 158, 11, 0.15)',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        Suggest +{suggestion.suggested}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })
                 )}
             </div>
 

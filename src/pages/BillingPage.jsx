@@ -1009,72 +1009,7 @@ export default function BillingPage() {
                                     Print Receipt (Thermal)
                                 </button>
 
-                                <button
-                                    className="btn btn-block"
-                                    onClick={() => setShowTelemetry(!showTelemetry)}
-                                    style={{
-                                        marginBottom: 8,
-                                        background: 'var(--bg-tertiary)',
-                                        color: 'var(--text-secondary)',
-                                        border: '1px solid var(--border-color)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: 8,
-                                        fontWeight: 700
-                                    }}
-                                >
-                                    <Terminal size={16} style={{ color: 'var(--primary-400)' }} />
-                                    {showTelemetry ? 'Hide' : 'Show'} ESC/POS Telemetry Log
-                                </button>
 
-                                {showTelemetry && activeSaleRecord && (
-                                    <div style={{
-                                        marginTop: 12,
-                                        marginBottom: 16,
-                                        background: '#0a0f1d',
-                                        border: '1px solid #1e293b',
-                                        borderRadius: 12,
-                                        padding: 12,
-                                        textAlign: 'left',
-                                        maxHeight: 240,
-                                        overflowY: 'auto',
-                                        fontFamily: 'Courier New, monospace'
-                                    }}>
-                                        <div style={{
-                                            fontSize: '0.72rem',
-                                            fontWeight: 800,
-                                            color: '#38bdf8',
-                                            borderBottom: '1px solid #1e293b',
-                                            paddingBottom: 6,
-                                            marginBottom: 8,
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.5px'
-                                        }}>
-                                            💻 Raw ESC/POS Print Stream
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.7rem' }}>
-                                            {generateEscPosStream(activeSaleRecord, activeSaleRecord.items || cart, settings).map((log, index) => (
-                                                <div key={index} style={{
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: 2,
-                                                    padding: '4px',
-                                                    background: 'rgba(255, 255, 255, 0.01)',
-                                                    borderRadius: 4
-                                                }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
-                                                        <span style={{ fontWeight: 800, color: '#f43f5e' }}>[{log.cmd}]</span>
-                                                        <span style={{ color: '#10b981' }}>{log.desc}</span>
-                                                    </div>
-                                                    <div style={{ color: '#e4e4e7', wordBreak: 'break-all' }}>
-                                                        HEX: <span style={{ color: '#fbbf24' }}>{log.hex}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
 
                                 <button
                                     className="btn btn-primary btn-block"
