@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Search, Plus, Edit2, Trash2, Package, X,
-    ChevronRight, Star, Minus, Scan, PackagePlus
+    ChevronRight, Star, Minus, Scan, PackagePlus,
+    AlertTriangle, Tags
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -9,7 +10,7 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import {
     getAllProducts, addProduct, updateProduct,
     deleteProduct, adjustStock, getCategories, getSetting,
-    quickRestock, getAllSuppliers
+    quickRestock, getAllSuppliers, updateProductCategories
 } from '../database';
 import { useToast } from '../components/Toast';
 
@@ -43,11 +44,18 @@ export default function ProductsPage() {
     const [restockSupplier, setRestockSupplier] = useState('');
     const [suppliers, setSuppliers] = useState([]);
     const [currency, setCurrency] = useState('₹');
+    const [lowStockThreshold, setLowStockThreshold] = useState(5);
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [editingCategory, setEditingCategory] = useState(null);
+    const [editCategoryValue, setEditCategoryValue] = useState('');
+    const [showDeleteCategory, setShowDeleteCategory] = useState(null);
     const showToast = useToast();
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
         setCurrency(c);
+        const threshold = await getSetting('low_stock_threshold');
+        setLowStockThreshold(parseInt(threshold) || 5);
     };
 
     const loadSuppliers = async () => {
@@ -197,9 +205,16 @@ export default function ProductsPage() {
     return (
         <div className="page-content">
             <AppHeader title="Products">
-                <button className="btn btn-primary btn-sm" onClick={openAdd} id="add-product-btn">
-                    <Plus size={16} /> Add
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryManager(true)} id="manage-categories-btn"
+                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                        <Tags size={14} /> Categories
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={openAdd} id="add-product-btn">
+                        <Plus size={16} /> Add
+                    </button>
+                </div>
             </AppHeader>
 
             {/* Search */}
@@ -242,32 +257,69 @@ export default function ProductsPage() {
                     )}
                 </div>
             ) : (
-                filtered.map(product => (
-                    <div key={product.id} className="product-list-item" onClick={() => openEdit(product)}>
-                        <div className="product-avatar">
-                            {product.frequently_used ? (
-                                <Star size={18} />
-                            ) : (
-                                product.name.charAt(0).toUpperCase()
-                            )}
-                        </div>
-                        <div className="product-list-info">
-                            <div className="product-list-name">{product.name}</div>
-                            <div className="product-list-meta">
-                                <span>{product.category}</span>
-                                <span className={`stock-badge ${product.stock_quantity <= 5 ? 'low' : 'ok'}`}>
-                                    {product.stock_quantity} in stock
-                                </span>
+                filtered.map(product => {
+                    const isOutOfStock = product.stock_quantity <= 0;
+                    const isLowStock = product.stock_quantity > 0 && product.stock_quantity <= lowStockThreshold;
+                    return (
+                        <div key={product.id} className={`product-list-item ${isOutOfStock ? 'out-of-stock' : ''}`} onClick={() => openEdit(product)}>
+                            <div className="product-avatar" style={
+                                isOutOfStock ? { background: 'linear-gradient(135deg, #7f1d1d, #991b1b)', opacity: 0.7 } :
+                                isLowStock ? { background: 'linear-gradient(135deg, #92400e, #b45309)' } : {}
+                            }>
+                                {product.frequently_used ? (
+                                    <Star size={18} />
+                                ) : (
+                                    product.name.charAt(0).toUpperCase()
+                                )}
+                            </div>
+                            <div className="product-list-info">
+                                <div className="product-list-name">{product.name}</div>
+                                <div className="product-list-meta">
+                                    <span>{product.category}</span>
+                                    <span className={`stock-badge ${isOutOfStock ? 'out' : isLowStock ? 'low' : 'ok'}`}>
+                                        {isOutOfStock ? (
+                                            <><AlertTriangle size={10} style={{ verticalAlign: 'middle', marginRight: 2 }} /> Out of stock</>
+                                        ) : isLowStock ? (
+                                            <><AlertTriangle size={10} style={{ verticalAlign: 'middle', marginRight: 2 }} /> {product.stock_quantity} left</>
+                                        ) : (
+                                            <>{product.stock_quantity} in stock</>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="product-list-price">{currency}{product.selling_price}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                        Cost: {currency}{product.cost_price}
+                                    </div>
+                                </div>
+                                {(isOutOfStock || isLowStock) && (
+                                    <button
+                                        className="btn btn-sm"
+                                        onClick={(e) => { e.stopPropagation(); openRestock(product); }}
+                                        id={`quick-restock-${product.id}`}
+                                        style={{
+                                            padding: '6px 10px',
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            background: isOutOfStock ? 'rgba(239, 68, 68, 0.12)' : 'rgba(251, 191, 36, 0.12)',
+                                            color: isOutOfStock ? 'var(--danger-400)' : 'var(--warning-400)',
+                                            border: `1px solid ${isOutOfStock ? 'rgba(239, 68, 68, 0.25)' : 'rgba(251, 191, 36, 0.25)'}`,
+                                            borderRadius: 8,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            whiteSpace: 'nowrap'
+                                        }}
+                                    >
+                                        <PackagePlus size={12} /> Restock
+                                    </button>
+                                )}
                             </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <div className="product-list-price">{currency}{product.selling_price}</div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                                Cost: {currency}{product.cost_price}
-                            </div>
-                        </div>
-                    </div>
-                ))
+                    );
+                })
             )}
 
             {/* Add/Edit Product Modal */}
@@ -372,7 +424,20 @@ export default function ProductsPage() {
                             />
                         </div>
 
-                        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                        <div style={{
+                            position: 'sticky',
+                            bottom: -24,
+                            background: 'var(--bg-secondary)',
+                            paddingTop: 16,
+                            paddingBottom: 24,
+                            marginTop: 16,
+                            marginInline: -22,
+                            paddingInline: 22,
+                            borderTop: '1px solid var(--border-color)',
+                            display: 'flex',
+                            gap: 12,
+                            zIndex: 10
+                        }}>
                             {editingProduct && (
                                 <>
                                     <button
@@ -573,6 +638,150 @@ export default function ProductsPage() {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Category Manager Modal */}
+            {showCategoryManager && (
+                <div className="modal-overlay" onClick={() => { setShowCategoryManager(false); setEditingCategory(null); }}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-handle" />
+                        <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tags size={20} style={{ color: 'var(--primary-400)' }} />
+                            Manage Categories
+                        </div>
+
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                            Rename or delete categories. Deleting moves products to "General".
+                        </div>
+
+                        {categories.filter(c => c !== 'All').length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                No categories yet. They appear when you assign categories to products.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflowY: 'auto' }}>
+                                {categories.filter(c => c !== 'All').map(cat => {
+                                    const productCount = products.filter(p => p.category === cat).length;
+                                    return (
+                                        <div key={cat} style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 10,
+                                            padding: '12px 14px',
+                                            background: 'var(--bg-card)',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)',
+                                            transition: 'all 0.15s ease'
+                                        }}>
+                                            {editingCategory === cat ? (
+                                                <>
+                                                    <input
+                                                        className="form-input"
+                                                        type="text"
+                                                        value={editCategoryValue}
+                                                        onChange={(e) => setEditCategoryValue(e.target.value)}
+                                                        autoFocus
+                                                        style={{ flex: 1, padding: '8px 10px', fontSize: '0.85rem' }}
+                                                        onKeyDown={async (e) => {
+                                                            if (e.key === 'Enter' && editCategoryValue.trim()) {
+                                                                try {
+                                                                    await updateProductCategories(cat, editCategoryValue.trim());
+                                                                    showToast(`Renamed "${cat}" → "${editCategoryValue.trim()}"`);
+                                                                    setEditingCategory(null);
+                                                                    loadProducts();
+                                                                } catch (err) {
+                                                                    showToast(err.message || 'Rename failed', 'error');
+                                                                }
+                                                            }
+                                                            if (e.key === 'Escape') setEditingCategory(null);
+                                                        }}
+                                                    />
+                                                    <button
+                                                        className="btn btn-primary btn-sm"
+                                                        style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                                                        onClick={async () => {
+                                                            if (!editCategoryValue.trim()) return;
+                                                            try {
+                                                                await updateProductCategories(cat, editCategoryValue.trim());
+                                                                showToast(`Renamed "${cat}" → "${editCategoryValue.trim()}"`);
+                                                                setEditingCategory(null);
+                                                                loadProducts();
+                                                            } catch (err) {
+                                                                showToast(err.message || 'Rename failed', 'error');
+                                                            }
+                                                        }}
+                                                    >Save</button>
+                                                    <button
+                                                        className="btn btn-secondary btn-sm"
+                                                        style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                                                        onClick={() => setEditingCategory(null)}
+                                                    ><X size={14} /></button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{cat}</div>
+                                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                                            {productCount} product{productCount !== 1 ? 's' : ''}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-secondary btn-sm"
+                                                        style={{ padding: '6px 10px' }}
+                                                        onClick={() => { setEditingCategory(cat); setEditCategoryValue(cat); }}
+                                                    >
+                                                        <Edit2 size={13} />
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        style={{
+                                                            padding: '6px 10px',
+                                                            background: 'rgba(239, 68, 68, 0.08)',
+                                                            color: 'var(--danger-400)',
+                                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                                        }}
+                                                        onClick={() => setShowDeleteCategory(cat)}
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <button
+                            className="btn btn-secondary btn-block"
+                            onClick={() => { setShowCategoryManager(false); setEditingCategory(null); }}
+                            style={{ marginTop: 16 }}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Category Confirmation */}
+            {showDeleteCategory && (
+                <ConfirmDialog
+                    title={`Delete "${showDeleteCategory}"?`}
+                    message={`All products in "${showDeleteCategory}" will be moved to "General". This cannot be undone.`}
+                    confirmText="Delete Category"
+                    variant="danger"
+                    onConfirm={async () => {
+                        try {
+                            await updateProductCategories(showDeleteCategory, 'General');
+                            showToast(`Category "${showDeleteCategory}" removed`);
+                            setShowDeleteCategory(null);
+                            loadProducts();
+                        } catch (err) {
+                            showToast(err.message || 'Delete failed', 'error');
+                        }
+                    }}
+                    onCancel={() => setShowDeleteCategory(null)}
+                />
             )}
         </div>
     );

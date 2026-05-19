@@ -72,3 +72,11 @@ export async function getCategories() {
     const cats = new Set((data || []).map(p => p.category).filter(Boolean));
     return [...cats];
 }
+
+export async function updateProductCategories(oldCategory, newCategory) {
+    const { error } = await supabase
+        .from('products')
+        .update({ category: newCategory, updated_at: new Date().toISOString() })
+        .eq('category', oldCategory);
+    if (error) throw error;
+}

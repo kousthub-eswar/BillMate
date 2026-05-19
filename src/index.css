@@ -1921,8 +1921,12 @@ select.form-input {
 }
 
 .product-list-item.out-of-stock {
-  opacity: 0.45;
-  pointer-events: none;
+  opacity: 0.6;
+}
+
+.stock-badge.out {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger-400);
 }
 
 .quick-item.out-of-stock {
@@ -3337,3 +3341,148 @@ select.form-input {
 .more-menu-item:hover .more-menu-label {
   color: var(--text-primary);
 }
+
+/* ======================== */
+/* Print Receipt Styles     */
+/* ======================== */
+
+@media print {
+  /* Hide all UI chrome */
+  .bottom-nav,
+  .pos-header,
+  .pos-search-bar,
+  .pos-category-pills,
+  .pos-products-area,
+  .pos-floating-cart,
+  .modal-overlay,
+  .more-menu-overlay,
+  .app-container > nav,
+  .page-header,
+  .page-content > .search-bar,
+  .phone-input-group,
+  .modal-handle,
+  .modal-title {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  * {
+    color: #000 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border-color: #ccc !important;
+  }
+}
+
+.print-receipt-window {
+  font-family: 'Courier New', Courier, monospace;
+  color: #000;
+  background: #fff;
+  padding: 16px;
+  width: 280px;
+  margin: 0 auto;
+}
+
+.print-receipt-window .receipt-header {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.print-receipt-window .receipt-header h2 {
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.print-receipt-window .receipt-header p {
+  font-size: 10px;
+  margin: 2px 0;
+  color: #555;
+}
+
+.print-receipt-window .receipt-divider {
+  border: none;
+  border-top: 1px dashed #000;
+  margin: 8px 0;
+}
+
+.print-receipt-window .receipt-items {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.print-receipt-window .receipt-items th {
+  font-size: 10px;
+  text-align: left;
+  padding: 4px 0;
+  border-bottom: 1px solid #000;
+  text-transform: uppercase;
+}
+
+.print-receipt-window .receipt-items th:last-child {
+  text-align: right;
+}
+
+.print-receipt-window .receipt-items td {
+  font-size: 11px;
+  padding: 3px 0;
+  vertical-align: top;
+}
+
+.print-receipt-window .receipt-items td:last-child {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.print-receipt-window .receipt-totals {
+  margin-top: 8px;
+}
+
+.print-receipt-window .receipt-totals .total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.print-receipt-window .receipt-totals .total-row.grand-total {
+  font-size: 14px;
+  font-weight: 900;
+  padding: 6px 0;
+  border-top: 2px solid #000;
+  margin-top: 4px;
+}
+
+.print-receipt-window .receipt-totals .total-row.discount {
+  color: #555;
+}
+
+.print-receipt-window .receipt-footer {
+  text-align: center;
+  margin-top: 12px;
+  font-size: 10px;
+  color: #555;
+}
+
+.print-receipt-window .receipt-footer p {
+  margin: 2px 0;
+}
+
+.print-receipt-window .receipt-footer .thank-you {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 8px;
+  color: #000;
+}

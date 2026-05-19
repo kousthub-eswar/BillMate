@@ -4,7 +4,7 @@ export { supabase, getCurrentUserId } from './supabase';
 export {
     getAllProducts, getProductById, addProduct, updateProduct,
     deleteProduct, searchProducts, getFrequentProducts, getLowStockProducts,
-    adjustStock, getCategories
+    adjustStock, getCategories, updateProductCategories
 } from './productService';
 
 export {

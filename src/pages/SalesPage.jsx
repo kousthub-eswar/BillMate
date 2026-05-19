@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
-    ShoppingBag
+    ShoppingBag, Search, Filter
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -18,6 +18,8 @@ export default function SalesPage() {
     const [showRefundConfirm, setShowRefundConfirm] = useState(null);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
     const [currency, setCurrency] = useState('₹');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [paymentFilter, setPaymentFilter] = useState('All');
     const showToast = useToast();
 
     const formatCurrency = (val) => {
@@ -92,6 +94,20 @@ export default function SalesPage() {
         .filter(s => !s.refunded)
         .reduce((sum, s) => sum + s.total, 0);
 
+    // Apply search and payment method filters on top of date-filtered sales
+    const filteredSales = sales.filter(sale => {
+        // Payment method filter
+        if (paymentFilter !== 'All' && sale.payment_method !== paymentFilter) return false;
+        // Search filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            const matchesId = sale.id.toString().includes(q);
+            const matchesCustomer = sale.customer_name && sale.customer_name.toLowerCase().includes(q);
+            if (!matchesId && !matchesCustomer) return false;
+        }
+        return true;
+    });
+
     return (
         <div className="page-content">
             <AppHeader title="Sales">
@@ -100,6 +116,61 @@ export default function SalesPage() {
                     <div style={{ color: 'var(--primary-300)', fontWeight: 600 }}>{formatCurrency(totalRevenue)}</div>
                 </div>
             </AppHeader>
+
+            {/* Search Bar */}
+            <div className="search-bar" style={{ marginBottom: 12 }}>
+                <Search size={18} />
+                <input
+                    type="text"
+                    placeholder="Search by Invoice # or Customer..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    id="sales-search"
+                    style={{ flex: 1, border: 'none', background: 'none', outline: 'none', color: 'var(--text-primary)', fontFamily: 'Inter, sans-serif', fontSize: '0.88rem' }}
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => setSearchQuery('')}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                    >✕</button>
+                )}
+            </div>
+
+            {/* Payment Method Filter */}
+            <div className="sales-payment-filter" style={{
+                display: 'flex',
+                gap: 6,
+                marginBottom: 12,
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+            }}>
+                {['All', 'Cash', 'UPI', 'Card', 'Credit'].map(method => (
+                    <button
+                        key={method}
+                        onClick={() => setPaymentFilter(method)}
+                        style={{
+                            padding: '6px 14px',
+                            borderRadius: 20,
+                            border: paymentFilter === method ? '1.5px solid var(--primary-500)' : '1px solid var(--border-color)',
+                            background: paymentFilter === method ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-card)',
+                            color: paymentFilter === method ? 'var(--primary-400)' : 'var(--text-secondary)',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            fontFamily: 'Inter, sans-serif',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.3px',
+                            transition: 'all 0.15s ease'
+                        }}
+                    >
+                        {method === 'All' && <Filter size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />}
+                        {method}
+                    </button>
+                ))}
+            </div>
 
             {/* Filter Tabs */}
             <div className="filter-tabs">
@@ -138,14 +209,25 @@ export default function SalesPage() {
             )}
 
             {/* Sales List */}
-            {sales.length === 0 ? (
+            {(searchQuery || paymentFilter !== 'All') && (
+                <div style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    marginBottom: 10,
+                    fontWeight: 600
+                }}>
+                    Showing {filteredSales.length} of {sales.length} transactions
+                </div>
+            )}
+
+            {filteredSales.length === 0 ? (
                 <div className="empty-state">
                     <Clock size={52} />
-                    <h3>No Sales Yet</h3>
-                    <p>No transactions found for this period. Sales will appear here after billing.</p>
+                    <h3>{searchQuery || paymentFilter !== 'All' ? 'No Matching Sales' : 'No Sales Yet'}</h3>
+                    <p>{searchQuery ? `No transactions match "${searchQuery}"` : paymentFilter !== 'All' ? `No ${paymentFilter} transactions found for this period.` : 'No transactions found for this period. Sales will appear here after billing.'}</p>
                 </div>
             ) : (
-                sales.map(sale => (
+                filteredSales.map(sale => (
                     <div
                         key={sale.id}
                         className={`sale-card ${sale.refunded ? 'refunded' : ''}`}

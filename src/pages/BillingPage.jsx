@@ -10,7 +10,8 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import {
     searchProducts, getFrequentProducts, createSale,
     getSaleById, getAllSettings, getAllCustomers,
-    addProduct, getCategories, getCustomerHistory
+    addProduct, getCategories, getCustomerHistory,
+    addCustomer
 } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
@@ -93,6 +94,8 @@ export default function BillingPage() {
     const [customers, setCustomers] = useState([]);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
+    const [showAddCustomer, setShowAddCustomer] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
     const showToast = useToast();
 
     // Loyalty points states
@@ -293,6 +296,12 @@ export default function BillingPage() {
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
+        if (paymentMethod === 'Credit' && !selectedCustomer) {
+            showToast('A customer is required for credit sales', 'error');
+            setShowAddCustomer(true);
+            return;
+        }
+
         try {
             let finalDiscountObj = null;
             if (discountAmount > 0) {
@@ -361,6 +370,30 @@ export default function BillingPage() {
             setCartOpen(false);
         }
     }, [cart.length, cartOpen]);
+
+    const handleCreateCustomer = async () => {
+        if (!newCustomer.name.trim()) {
+            showToast('Customer name is required', 'error');
+            return;
+        }
+        try {
+            const customerId = await addCustomer(newCustomer);
+            const updatedCustomers = await getAllCustomers();
+            setCustomers(updatedCustomers);
+            const newlyCreated = updatedCustomers.find(c => c.id === customerId);
+            setSelectedCustomer(newlyCreated || null);
+            setNewCustomer({ name: '', phone: '', email: '' });
+            setShowAddCustomer(false);
+            showToast('Customer created successfully');
+            if (paymentMethod === 'Credit') {
+                // Keep credit if it was selected
+            } else {
+                setPaymentMethod('Cash');
+            }
+        } catch (err) {
+            showToast(err.message || 'Failed to create customer', 'error');
+        }
+    };
 
     return (
         <div className="pos-page">
@@ -712,31 +745,71 @@ export default function BillingPage() {
                         </div>
 
                         {/* Customer Selection */}
-                        <div className="form-group">
-                            <label className="form-label">Customer (Optional)</label>
-                            <div style={{ position: 'relative' }}>
-                                <select
-                                    className="form-input"
-                                    value={selectedCustomer?.id || ''}
-                                    onChange={(e) => {
-                                        const c = customers.find(c => c.id === parseInt(e.target.value));
-                                        setSelectedCustomer(c || null);
-                                        loadCustomerLoyalty(c || null);
-                                        if (e.target.value === '') {
-                                            setPaymentMethod('Cash');
-                                        }
-                                    }}
-                                    style={{ appearance: 'none' }}
-                                >
-                                    <option value="">Guest Customer</option>
-                                    {customers.map(c => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name} {c.balance > 0 ? `(Due: ${currency}${c.balance})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                                <Users size={16} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                        <div className="form-group" style={{ marginBottom: 20 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <label className="form-label" style={{ margin: 0 }}>Customer (Optional)</label>
+                                {!showAddCustomer && (
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary-400)' }}
+                                        onClick={() => setShowAddCustomer(true)}
+                                    >
+                                        + New
+                                    </button>
+                                )}
                             </div>
+                            
+                            {showAddCustomer ? (
+                                <div style={{ background: 'var(--bg-primary)', padding: 12, borderRadius: 12, border: '1px solid var(--border-color)', marginBottom: 8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Create New Customer</div>
+                                        <button className="btn-icon" onClick={() => setShowAddCustomer(false)}><X size={16} /></button>
+                                    </div>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        placeholder="Customer Name *"
+                                        value={newCustomer.name}
+                                        onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
+                                        style={{ marginBottom: 8 }}
+                                    />
+                                    <input
+                                        className="form-input"
+                                        type="tel"
+                                        placeholder="Phone Number (Optional)"
+                                        value={newCustomer.phone}
+                                        onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
+                                        style={{ marginBottom: 12 }}
+                                    />
+                                    <button className="btn btn-primary btn-block btn-sm" onClick={handleCreateCustomer}>
+                                        Save & Select
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ position: 'relative' }}>
+                                    <select
+                                        className="form-input"
+                                        value={selectedCustomer?.id || ''}
+                                        onChange={(e) => {
+                                            const c = customers.find(c => c.id === parseInt(e.target.value));
+                                            setSelectedCustomer(c || null);
+                                            loadCustomerLoyalty(c || null);
+                                            if (e.target.value === '' && paymentMethod === 'Credit') {
+                                                setPaymentMethod('Cash');
+                                            }
+                                        }}
+                                        style={{ appearance: 'none' }}
+                                    >
+                                        <option value="">Guest Customer</option>
+                                        {customers.map(c => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.name} {c.balance > 0 ? `(Due: ${currency}${c.balance})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <Users size={16} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                                </div>
+                            )}
                         </div>
 
                         {/* Customer Loyalty Points Engine UI */}
@@ -819,14 +892,18 @@ export default function BillingPage() {
                                 { method: 'Cash', icon: Banknote },
                                 { method: 'UPI', icon: Smartphone },
                                 { method: 'Card', icon: CreditCard },
-                                { method: 'Credit', icon: Users, disabled: !selectedCustomer }
-                            ].map(({ method, icon: Icon, disabled }) => (
+                                { method: 'Credit', icon: Users }
+                            ].map(({ method, icon: Icon }) => (
                                 <button
                                     key={method}
                                     className={`payment-method-btn ${paymentMethod === method ? 'selected' : ''}`}
-                                    onClick={() => !disabled && setPaymentMethod(method)}
-                                    disabled={disabled}
-                                    style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                    onClick={() => {
+                                        setPaymentMethod(method);
+                                        if (method === 'Credit' && !selectedCustomer) {
+                                            showToast('Select or create a customer for credit sales', 'warning');
+                                            setShowAddCustomer(true);
+                                        }
+                                    }}
                                 >
                                     <Icon size={24} />
                                     {method}
@@ -971,33 +1048,135 @@ export default function BillingPage() {
                                 <button
                                     className="btn btn-secondary btn-block"
                                     onClick={() => {
+                                        if (!activeSaleRecord) return;
+                                        const sale = activeSaleRecord;
+                                        const items = sale.items || [];
+                                        const cur = settings.currency || '₹';
+                                        const shopName = settings.shop_name || 'BillMate';
+                                        const subtotal = sale.subtotal || (sale.total + (sale.discount_amount || 0));
+                                        
+                                        const itemRows = items.map(item => `
+                                            <tr>
+                                                <td>${item.product_name || item.name}</td>
+                                                <td style="text-align:center">${item.quantity}</td>
+                                                <td style="text-align:right;font-weight:700">${cur}${Number(item.subtotal || item.selling_price * item.quantity).toFixed(2)}</td>
+                                            </tr>
+                                        `).join('');
+
                                         const printWindow = window.open('', '_blank');
                                         printWindow.document.write(`
                                             <html>
                                                 <head>
-                                                    <title>Print Receipt</title>
+                                                    <title>Receipt #${sale.id}</title>
                                                     <style>
+                                                        * { margin: 0; padding: 0; box-sizing: border-box; }
                                                         body {
                                                             font-family: 'Courier New', Courier, monospace;
-                                                            padding: 20px;
                                                             width: 280px;
                                                             margin: 0 auto;
+                                                            padding: 12px 8px;
                                                             color: #000;
                                                             background: #fff;
-                                                        }
-                                                        pre {
-                                                            white-space: pre-wrap;
-                                                            font-size: 13px;
+                                                            font-size: 12px;
                                                             line-height: 1.4;
-                                                            margin: 0;
+                                                        }
+                                                        .header { text-align: center; margin-bottom: 8px; }
+                                                        .header h2 {
+                                                            font-size: 16px;
+                                                            font-weight: 900;
+                                                            text-transform: uppercase;
+                                                            letter-spacing: 2px;
+                                                            margin-bottom: 2px;
+                                                        }
+                                                        .header .meta {
+                                                            font-size: 9px;
+                                                            color: #666;
+                                                        }
+                                                        .divider {
+                                                            border: none;
+                                                            border-top: 1px dashed #333;
+                                                            margin: 6px 0;
+                                                        }
+                                                        table {
+                                                            width: 100%;
+                                                            border-collapse: collapse;
+                                                        }
+                                                        th {
+                                                            font-size: 9px;
+                                                            text-transform: uppercase;
+                                                            letter-spacing: 0.5px;
+                                                            border-bottom: 1px solid #000;
+                                                            padding: 4px 0;
+                                                            text-align: left;
+                                                        }
+                                                        th:nth-child(2) { text-align: center; }
+                                                        th:last-child { text-align: right; }
+                                                        td {
+                                                            padding: 3px 0;
+                                                            font-size: 11px;
+                                                            vertical-align: top;
+                                                        }
+                                                        .totals { margin-top: 4px; }
+                                                        .totals .row {
+                                                            display: flex;
+                                                            justify-content: space-between;
+                                                            padding: 2px 0;
+                                                            font-size: 11px;
+                                                        }
+                                                        .totals .row.grand {
+                                                            font-size: 14px;
+                                                            font-weight: 900;
+                                                            border-top: 2px solid #000;
+                                                            margin-top: 4px;
+                                                            padding-top: 6px;
+                                                        }
+                                                        .totals .row.discount { color: #666; }
+                                                        .footer {
+                                                            text-align: center;
+                                                            margin-top: 12px;
+                                                            font-size: 10px;
+                                                            color: #666;
+                                                        }
+                                                        .footer .thanks {
+                                                            font-size: 12px;
+                                                            font-weight: 700;
+                                                            color: #000;
+                                                            margin-top: 6px;
                                                         }
                                                         @media print {
-                                                            body { width: 100%; padding: 0; }
+                                                            body { width: 100%; padding: 0 4px; }
                                                         }
                                                     </style>
                                                 </head>
                                                 <body onload="window.print(); window.close();">
-                                                    <pre>${receiptText}</pre>
+                                                    <div class="header">
+                                                        <h2>${shopName}</h2>
+                                                        <div class="meta">Invoice #${sale.id}</div>
+                                                        <div class="meta">${new Date(sale.date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                                                    </div>
+                                                    <hr class="divider">
+                                                    <table>
+                                                        <thead>
+                                                            <tr><th>Item</th><th>Qty</th><th>Amt</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            ${itemRows}
+                                                        </tbody>
+                                                    </table>
+                                                    <hr class="divider">
+                                                    <div class="totals">
+                                                        ${sale.discount_amount > 0 ? `
+                                                            <div class="row"><span>Subtotal</span><span>${cur}${Number(subtotal).toFixed(2)}</span></div>
+                                                            <div class="row discount"><span>Discount</span><span>-${cur}${Number(sale.discount_amount).toFixed(2)}</span></div>
+                                                        ` : ''}
+                                                        <div class="row grand"><span>TOTAL</span><span>${cur}${Number(sale.total).toFixed(2)}</span></div>
+                                                        <div class="row"><span>Payment</span><span>${sale.payment_method}</span></div>
+                                                    </div>
+                                                    <hr class="divider">
+                                                    <div class="footer">
+                                                        <p>Powered by BillMate POS</p>
+                                                        <div class="thanks">Thank you! Visit again.</div>
+                                                    </div>
                                                 </body>
                                             </html>
                                         `);
