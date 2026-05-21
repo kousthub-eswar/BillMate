@@ -684,8 +684,9 @@ body {
 }
 
 .btn-sm {
-  padding: 8px 14px;
+  padding: 6px 12px;
   font-size: 0.8rem;
+  min-height: 36px;
 }
 
 /* ======================== */
@@ -3304,6 +3305,13 @@ select.form-input {
   .bottom-nav {
     padding: 0 6px;
     padding-bottom: var(--safe-area-bottom);
+  }
+
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    min-height: 30px;
+    gap: 4px;
   }
 }
 
