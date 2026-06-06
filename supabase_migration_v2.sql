@@ -191,7 +191,7 @@ CREATE POLICY "settings_delete" ON settings FOR DELETE USING (auth.uid() = user_
 
 -- Audit Logs
 CREATE POLICY "audit_logs_select" ON audit_logs FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "audit_logs_insert" ON audit_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
+
 
 -- ==========================================
 -- STEP 4: Update RPC functions (multi-tenant)

@@ -20,6 +20,7 @@ import SuppliersPage from './pages/SuppliersPage';
 import PurchasesPage from './pages/PurchasesPage';
 import SettingsPage from './pages/SettingsPage';
 import DaySummaryPage from './pages/DaySummaryPage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 /* ── Set New Password Screen ── */
 function ResetPasswordPage({ onComplete }) {
@@ -294,17 +295,72 @@ function App() {
 
   const renderPage = () => {
     switch (activePage) {
-      case 'dashboard': return <DashboardPage onNavigate={setActivePage} />;
-      case 'day-summary': return <DaySummaryPage onBack={() => setActivePage('dashboard')} />;
-      case 'billing': return <BillingPage />;
-      case 'products': return <ProductsPage />;
-      case 'sales': return <SalesPage />;
-      case 'expenses': return <ExpensesPage />;
-      case 'customers': return <CustomersPage />;
-      case 'suppliers': return <SuppliersPage />;
-      case 'purchases': return <PurchasesPage />;
-      case 'settings': return <SettingsPage onLogout={handleLogout} />;
-      default: return <BillingPage />;
+      case 'dashboard':
+        return (
+          <ErrorBoundary key="dashboard">
+            <DashboardPage onNavigate={setActivePage} />
+          </ErrorBoundary>
+        );
+      case 'day-summary':
+        return (
+          <ErrorBoundary key="day-summary">
+            <DaySummaryPage onBack={() => setActivePage('dashboard')} />
+          </ErrorBoundary>
+        );
+      case 'billing':
+        return (
+          <ErrorBoundary key="billing">
+            <BillingPage />
+          </ErrorBoundary>
+        );
+      case 'products':
+        return (
+          <ErrorBoundary key="products">
+            <ProductsPage />
+          </ErrorBoundary>
+        );
+      case 'sales':
+        return (
+          <ErrorBoundary key="sales">
+            <SalesPage />
+          </ErrorBoundary>
+        );
+      case 'expenses':
+        return (
+          <ErrorBoundary key="expenses">
+            <ExpensesPage />
+          </ErrorBoundary>
+        );
+      case 'customers':
+        return (
+          <ErrorBoundary key="customers">
+            <CustomersPage />
+          </ErrorBoundary>
+        );
+      case 'suppliers':
+        return (
+          <ErrorBoundary key="suppliers">
+            <SuppliersPage />
+          </ErrorBoundary>
+        );
+      case 'purchases':
+        return (
+          <ErrorBoundary key="purchases">
+            <PurchasesPage />
+          </ErrorBoundary>
+        );
+      case 'settings':
+        return (
+          <ErrorBoundary key="settings">
+            <SettingsPage onLogout={handleLogout} />
+          </ErrorBoundary>
+        );
+      default:
+        return (
+          <ErrorBoundary key="billing-default">
+            <BillingPage />
+          </ErrorBoundary>
+        );
     }
   };
 

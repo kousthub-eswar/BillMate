@@ -18,6 +18,7 @@ create table if not exists products (
   category text not null default 'General',
   frequently_used smallint not null default 0,
   barcode text default '',
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -131,13 +132,18 @@ create table if not exists audit_logs (
 -- ==================
 
 create index if not exists idx_products_user on products(user_id);
+create index if not exists idx_products_user_active on products(user_id, is_active);
 create index if not exists idx_customers_user on customers(user_id);
 create index if not exists idx_suppliers_user on suppliers(user_id);
 create index if not exists idx_sales_user on sales(user_id);
+create index if not exists idx_sales_user_created on sales(user_id, created_at desc);
 create index if not exists idx_sale_items_user on sale_items(user_id);
+create index if not exists idx_sale_items_sale_id on sale_items(sale_id);
 create index if not exists idx_purchases_user on purchases(user_id);
+create index if not exists idx_purchases_user_created on purchases(user_id, created_at desc);
 create index if not exists idx_purchase_items_user on purchase_items(user_id);
 create index if not exists idx_expenses_user on expenses(user_id);
+create index if not exists idx_expenses_user_date on expenses(user_id, date desc);
 create index if not exists idx_settings_user on settings(user_id);
 create index if not exists idx_audit_logs_user on audit_logs(user_id);
 
@@ -172,7 +178,7 @@ begin
     case when TG_OP = 'DELETE' then OLD.id else NEW.id end,
     case when TG_OP in ('UPDATE','DELETE') then to_jsonb(OLD) else null end,
     case when TG_OP in ('INSERT','UPDATE') then to_jsonb(NEW) else null end,
-    auth.uid()
+    coalesce(auth.uid(), (case when TG_OP = 'DELETE' then OLD.user_id else NEW.user_id end))
   );
   return coalesce(NEW, OLD);
 end;
@@ -208,7 +214,19 @@ declare
   v_item jsonb;
   v_uid uuid := auth.uid();
 begin
+  -- Verify customer ownership
+  if p_customer_id is not null then
+    if not exists (select 1 from customers where id = p_customer_id and user_id = v_uid) then
+      raise exception 'Customer not found or access denied';
+    end if;
+  end if;
+
   for v_item in select * from jsonb_array_elements(p_cart) loop
+    -- Verify product ownership
+    if not exists (select 1 from products where id = (v_item->>'id')::bigint and user_id = v_uid) then
+      raise exception 'Product not found or access denied';
+    end if;
+
     v_subtotal := v_subtotal + (v_item->>'selling_price')::numeric * (v_item->>'quantity')::integer;
     v_profit := v_profit + ((v_item->>'selling_price')::numeric - coalesce((v_item->>'cost_price')::numeric,0)) * (v_item->>'quantity')::integer;
     v_item_count := v_item_count + (v_item->>'quantity')::integer;
@@ -317,7 +335,17 @@ declare
   v_item jsonb;
   v_uid uuid := auth.uid();
 begin
+  -- Verify supplier ownership
+  if not exists (select 1 from suppliers where id = p_supplier_id and user_id = v_uid) then
+    raise exception 'Supplier not found or access denied';
+  end if;
+
   for v_item in select * from jsonb_array_elements(p_items) loop
+    -- Verify product ownership
+    if not exists (select 1 from products where id = (v_item->>'product_id')::bigint and user_id = v_uid) then
+      raise exception 'Product not found or access denied';
+    end if;
+
     v_total_cost := v_total_cost + (v_item->>'quantity')::integer * (v_item->>'purchase_price')::numeric;
   end loop;
 
@@ -384,6 +412,12 @@ begin
   select * into v_product from products where id = p_product_id and user_id = v_uid;
   if not found then raise exception 'Product not found'; end if;
 
+  if p_supplier_id is not null then
+    if not exists (select 1 from suppliers where id = p_supplier_id and user_id = v_uid) then
+      raise exception 'Supplier not found or access denied';
+    end if;
+  end if;
+
   v_total := p_quantity * p_purchase_price;
 
   insert into purchases (user_id, supplier_id, date, total_cost, notes)
@@ -400,6 +434,62 @@ begin
   where id = p_product_id and user_id = v_uid;
 
   return jsonb_build_object('purchaseId', v_purchase_id, 'totalCost', v_total);
+end;
+$$;
+
+-- ==================
+-- 10b. RPC: get_dashboard_stats (single DB call stats, multi-tenant)
+-- ==================
+
+create or replace function get_dashboard_stats(p_start_date timestamptz, p_end_date timestamptz)
+returns json language plpgsql security definer as $$
+declare
+  v_uid uuid := auth.uid();
+  v_total_revenue numeric(12,2);
+  v_total_profit numeric(12,2);
+  v_transaction_count integer;
+  v_top_products json;
+begin
+  -- 1. Get aggregate stats from sales
+  select 
+    coalesce(sum(total), 0), 
+    coalesce(sum(profit), 0), 
+    count(id)::integer
+  into 
+    v_total_revenue, 
+    v_total_profit, 
+    v_transaction_count
+  from sales
+  where user_id = v_uid
+    and date >= p_start_date
+    and date <= p_end_date
+    and refunded = false
+    and payment_method <> 'Settle';
+
+  -- 2. Get top 5 selling products during the period
+  select coalesce(json_agg(t), '[]'::json)
+  into v_top_products
+  from (
+    select si.product_name as name, sum(si.quantity)::integer as quantity
+    from sale_items si
+    join sales s on si.sale_id = s.id
+    where s.user_id = v_uid
+      and s.date >= p_start_date
+      and s.date <= p_end_date
+      and s.refunded = false
+      and s.payment_method <> 'Settle'
+    group by si.product_name
+    order by quantity desc, si.product_name
+    limit 5
+  ) t;
+
+  -- 3. Return combined stats as json object
+  return json_build_object(
+    'total_revenue', v_total_revenue,
+    'total_profit', v_total_profit,
+    'transaction_count', v_transaction_count,
+    'top_5_products', v_top_products
+  );
 end;
 $$;
 
@@ -474,4 +564,15 @@ create policy "settings_delete" on settings for delete using (auth.uid() = user_
 
 -- Audit Logs (read-only for users, inserts done by trigger via security definer)
 create policy "audit_logs_select" on audit_logs for select using (auth.uid() = user_id);
-create policy "audit_logs_insert" on audit_logs for insert with check (auth.uid() = user_id);
+
+-- =============================================
+-- 12. MIGRATIONS & NEW INDEXES (For safe re-run)
+-- =============================================
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active boolean not null default true;
+
+CREATE INDEX IF NOT EXISTS idx_sales_user_created ON sales(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_products_user_active ON products(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_customers_user ON customers(user_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_user_created ON purchases(user_id, created_at DESC);

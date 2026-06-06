@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
     Truck, UserPlus, Search, Phone, MapPin,
     Edit2, Trash2, X, ChevronRight, Package,
-    Calendar, DollarSign
+    Calendar, DollarSign, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -33,6 +33,9 @@ export default function SuppliersPage() {
     const [currency, setCurrency] = useState('₹');
     const [supplierStats, setSupplierStats] = useState({});
     const showToast = useToast();
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
@@ -40,15 +43,24 @@ export default function SuppliersPage() {
     };
 
     const loadSuppliers = async () => {
-        const all = await getAllSuppliers();
-        // Enrich with stats
-        const withStats = await Promise.all(all.map(async (s) => {
-            const stats = await getSupplierStats(s.id);
-            return { ...s, ...stats };
-        }));
-        // Sort by total spend descending
-        withStats.sort((a, b) => (b.totalSpend || 0) - (a.totalSpend || 0));
-        setSuppliers(withStats);
+        setLoading(true);
+        setError(false);
+        try {
+            const all = await getAllSuppliers();
+            // Enrich with stats
+            const withStats = await Promise.all(all.map(async (s) => {
+                const stats = await getSupplierStats(s.id);
+                return { ...s, ...stats };
+            }));
+            // Sort by total spend descending
+            withStats.sort((a, b) => (b.totalSpend || 0) - (a.totalSpend || 0));
+            setSuppliers(withStats);
+        } catch (err) {
+            setError(true);
+            showToast('Failed to load suppliers', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -59,12 +71,21 @@ export default function SuppliersPage() {
     useEffect(() => {
         if (query.trim()) {
             (async () => {
-                const results = await searchSuppliers(query);
-                const withStats = await Promise.all(results.map(async (s) => {
-                    const stats = await getSupplierStats(s.id);
-                    return { ...s, ...stats };
-                }));
-                setSuppliers(withStats);
+                setLoading(true);
+                setError(false);
+                try {
+                    const results = await searchSuppliers(query);
+                    const withStats = await Promise.all(results.map(async (s) => {
+                        const stats = await getSupplierStats(s.id);
+                        return { ...s, ...stats };
+                    }));
+                    setSuppliers(withStats);
+                } catch (err) {
+                    setError(true);
+                    showToast('Failed to search suppliers', 'error');
+                } finally {
+                    setLoading(false);
+                }
             })();
         } else {
             loadSuppliers();
@@ -72,12 +93,14 @@ export default function SuppliersPage() {
     }, [query]);
 
     const openAdd = () => {
+        setErrors({});
         setEditingSupplier(null);
         setFormData(EMPTY_SUPPLIER);
         setShowForm(true);
     };
 
     const openEdit = (supplier) => {
+        setErrors({});
         setEditingSupplier(supplier);
         setFormData({
             name: supplier.name,
@@ -89,17 +112,41 @@ export default function SuppliersPage() {
     };
 
     const handleSave = async () => {
-        if (!formData.name.trim()) {
-            showToast('Supplier name is required', 'error');
+        const newErrors = {};
+        const trimmedName = formData.name.trim();
+        const trimmedPhone = (formData.phone || '').trim();
+        const trimmedAddress = (formData.address || '').trim();
+        const trimmedNotes = (formData.notes || '').trim();
+
+        if (!trimmedName) {
+            newErrors.name = 'Supplier name is required';
+        } else if (trimmedName.length > 100) {
+            newErrors.name = 'Supplier name cannot exceed 100 characters';
+        }
+
+        if (trimmedPhone && !/^[+\d\s]+$/.test(trimmedPhone)) {
+            newErrors.phone = 'Phone number can only contain digits, spaces, and +';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
 
         try {
+            const payload = {
+                name: trimmedName,
+                phone: trimmedPhone,
+                address: trimmedAddress,
+                notes: trimmedNotes
+            };
+
             if (editingSupplier) {
-                await updateSupplier(editingSupplier.id, formData);
+                await updateSupplier(editingSupplier.id, payload);
                 showToast('Supplier updated');
             } else {
-                await addSupplier(formData);
+                await addSupplier(payload);
                 showToast('Supplier added');
             }
             setShowForm(false);
@@ -173,7 +220,85 @@ export default function SuppliersPage() {
             )}
 
             {/* Supplier List */}
-            {suppliers.length === 0 ? (
+            {loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="skeleton-shimmer" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '16px',
+                            borderRadius: 'var(--radius-md)',
+                            minHeight: '72px',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%' }}>
+                                <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                    <div className="skeleton-box" style={{ width: '40%', height: '16px' }} />
+                                    <div className="skeleton-box" style={{ width: '60%', height: '12px' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, width: '20%' }}>
+                                <div className="skeleton-box" style={{ width: '60px', height: '16px' }} />
+                                <div className="skeleton-box" style={{ width: '40px', height: '12px' }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : error ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)',
+                    margin: '20px 0'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(244, 63, 94, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--danger-500)',
+                        marginBottom: '16px'
+                    }}>
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        Connection Failed
+                    </h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Failed to load suppliers. Please check your connection and try again.
+                    </p>
+                    <button
+                        onClick={() => {
+                            if (query.trim()) {
+                                setQuery(query);
+                            } else {
+                                loadSuppliers();
+                            }
+                        }}
+                        className="btn btn-primary"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <RotateCcw size={14} /> Retry
+                    </button>
+                </div>
+            ) : suppliers.length === 0 ? (
                 <div className="empty-state">
                     <Truck size={52} />
                     <h3>{query.trim() ? 'No Matching Suppliers' : 'No Suppliers Yet'}</h3>
@@ -227,10 +352,14 @@ export default function SuppliersPage() {
                                 type="text"
                                 placeholder="e.g. Sharma Traders"
                                 value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, name: e.target.value });
+                                    if (errors.name) setErrors(prev => ({ ...prev, name: null }));
+                                }}
                                 autoFocus
                                 id="supplier-name-input"
                             />
+                            {errors.name && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.name}</p>}
                         </div>
 
                         <div className="form-group">
@@ -240,9 +369,13 @@ export default function SuppliersPage() {
                                 type="tel"
                                 placeholder="Optional"
                                 value={formData.phone}
-                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, phone: e.target.value });
+                                    if (errors.phone) setErrors(prev => ({ ...prev, phone: null }));
+                                }}
                                 id="supplier-phone-input"
                             />
+                            {errors.phone && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.phone}</p>}
                         </div>
 
                         <div className="form-group">

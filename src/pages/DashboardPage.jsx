@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-    getTodayStats, getLowStockProducts, getTopSellingProducts,
-    getSetting, getTodayExpenseTotal, undoLastSale,
+    getDashboardStats, getLowStockProducts,
+    getSetting, getExpenseTotal, undoLastSale,
     getAllProducts, supabase
 } from '../database';
 import {
@@ -18,7 +18,9 @@ import {
     Activity,
     PackageX,
     Package,
-    Users
+    Users,
+    Filter,
+    Calendar
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import AlertsPanel, { useAlertCount } from '../components/AlertsPanel';
@@ -36,59 +38,116 @@ export default function DashboardPage({ onNavigate }) {
     const [slowMoving, setSlowMoving] = useState([]);
     const [profitReport, setProfitReport] = useState([]);
     const [forecasting, setForecasting] = useState({ nextDayRevenue: 0, trend: 'stable', replenishment: [] });
+    
+    // Filter and Loading States
+    const [filter, setFilter] = useState('today');
+    const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+    const [loading, setLoading] = useState(true);
+
     const alertCount = useAlertCount();
     const showToast = useToast();
 
+    // Helper: calculate start and end dates based on filter type
+    const getDateRange = (filterType, customRange = null) => {
+        const now = new Date();
+        let startDate;
+        let endDate = new Date(now);
+
+        switch (filterType) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                break;
+            case 'week':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                break;
+            case 'custom':
+                if (customRange && customRange.startDate && customRange.endDate) {
+                    startDate = new Date(customRange.startDate);
+                    endDate = new Date(customRange.endDate);
+                    endDate.setHours(23, 59, 59, 999);
+                } else {
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                }
+                break;
+            default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                break;
+        }
+        return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+    };
+
     const loadDashboard = async () => {
-        const [statsData, curr, thresh, expTotal] = await Promise.all([
-            getTodayStats(),
-            getSetting('currency'),
-            getSetting('low_stock_threshold'),
-            getTodayExpenseTotal()
-        ]);
+        setLoading(true);
+        try {
+            const { startDate, endDate } = getDateRange(filter, dateRange);
 
-        setStats(statsData);
-        setCurrency(curr);
-        setExpenseTotal(expTotal);
+            const [statsData, curr, thresh, expTotal] = await Promise.all([
+                getDashboardStats(startDate, endDate),
+                getSetting('currency'),
+                getSetting('low_stock_threshold'),
+                getExpenseTotal(startDate, endDate)
+            ]);
 
-        const [lowStockData, topData] = await Promise.all([
-            getLowStockProducts(parseInt(thresh)),
-            getTopSellingProducts(5)
-        ]);
+            setStats({
+                totalRevenue: statsData.totalRevenue,
+                totalProfit: statsData.totalProfit,
+                transactionCount: statsData.transactionCount
+            });
+            setTopProducts(statsData.topProducts);
+            setCurrency(curr);
+            setExpenseTotal(expTotal);
 
-        setLowStock(lowStockData);
-        setTopProducts(topData);
+            const lowStockData = await getLowStockProducts(parseInt(thresh));
+            setLowStock(lowStockData);
 
-        // Load advanced analytics
-        await loadWeeklyRevenue();
-        await loadSlowMoving(parseInt(thresh));
-        await loadProfitReport();
+            // Load advanced analytics
+            await loadWeeklyRevenue();
+            await loadSlowMoving(parseInt(thresh));
+            await loadProfitReport();
 
-        // Calculate automated replenishment suggestions
-        const suggestions = await loadReplenishment(lowStockData);
-        setForecasting(prev => ({
-            ...prev,
-            replenishment: suggestions
-        }));
+            // Calculate automated replenishment suggestions
+            const suggestions = await loadReplenishment(lowStockData);
+            setForecasting(prev => ({
+                ...prev,
+                replenishment: suggestions
+            }));
+        } catch (err) {
+            console.error('Failed to load dashboard:', err);
+            showToast('Failed to load dashboard data', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const loadReplenishment = async (lowStockData) => {
         if (!lowStockData || lowStockData.length === 0) return [];
         try {
-            const { data: allSales } = await supabase.from('sales').select('id, date, refunded');
-            const activeSales = (allSales || []).filter(s => !s.refunded);
+            const now = new Date();
+            const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+            const { data: recentSales } = await supabase.from('sales').select('id, date, refunded').gte('date', weekAgo);
+            const activeSales = (recentSales || []).filter(s => !s.refunded);
             const activeSaleIds = new Set(activeSales.map(s => s.id));
             
-            const { data: saleItems } = await supabase.from('sale_items').select('product_id, quantity, sale_id');
-            const validItems = (saleItems || []).filter(item => activeSaleIds.has(item.sale_id));
+            let validItems = [];
+            if (activeSaleIds.size > 0) {
+                const { data: saleItems } = await supabase.from('sale_items').select('product_id, quantity, sale_id').in('sale_id', Array.from(activeSaleIds));
+                validItems = saleItems || [];
+            }
             
-            const now = new Date();
-            const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+            const weekAgoDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
             
             const weeklySalesCount = {};
             validItems.forEach(item => {
                 const parentSale = activeSales.find(s => s.id === item.sale_id);
-                if (parentSale && new Date(parentSale.date) >= weekAgo) {
+                if (parentSale && new Date(parentSale.date) >= weekAgoDate) {
                     weeklySalesCount[item.product_id] = (weeklySalesCount[item.product_id] || 0) + Number(item.quantity);
                 }
             });
@@ -118,9 +177,10 @@ export default function DashboardPage({ onNavigate }) {
     };
 
     const loadWeeklyRevenue = async () => {
-        const { data: allSales } = await supabase.from('sales').select('*');
-        const nonRefunded = (allSales || []).filter(s => !s.refunded && s.payment_method !== 'Settle');
         const now = new Date();
+        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+        const { data: recentSales } = await supabase.from('sales').select('*').gte('date', weekAgo);
+        const nonRefunded = (recentSales || []).filter(s => !s.refunded && s.payment_method !== 'Settle');
         const days = [];
 
         for (let i = 6; i >= 0; i--) {
@@ -167,17 +227,21 @@ export default function DashboardPage({ onNavigate }) {
 
     const loadSlowMoving = async (threshold) => {
         const products = await getAllProducts();
-        const { data: allSales } = await supabase.from('sales').select('*');
-        const nonRefunded = (allSales || []).filter(s => !s.refunded);
-
         const now = new Date();
-        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+        const { data: recentSales } = await supabase.from('sales').select('*').gte('date', weekAgo);
+        const nonRefunded = (recentSales || []).filter(s => !s.refunded);
+
+        const weekAgoDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
         const recentSaleIds = new Set(
-            nonRefunded.filter(s => new Date(s.date) >= weekAgo).map(s => s.id)
+            nonRefunded.filter(s => new Date(s.date) >= weekAgoDate).map(s => s.id)
         );
 
-        const { data: saleItems } = await supabase.from('sale_items').select('*');
-        const recentSaleItems = (saleItems || []).filter(item => recentSaleIds.has(item.sale_id));
+        let recentSaleItems = [];
+        if (recentSaleIds.size > 0) {
+            const { data: saleItems } = await supabase.from('sale_items').select('*').in('sale_id', Array.from(recentSaleIds));
+            recentSaleItems = saleItems || [];
+        }
 
         // Find products with stock > threshold but no recent sales
         const recentlySoldProductIds = new Set(recentSaleItems.map(i => i.product_id));
@@ -208,8 +272,11 @@ export default function DashboardPage({ onNavigate }) {
     };
 
     useEffect(() => {
+        if (filter === 'custom' && (!dateRange.startDate || !dateRange.endDate)) {
+            return;
+        }
         loadDashboard();
-    }, []);
+    }, [filter, dateRange]);
 
     const handleUndoLastSale = async () => {
         try {
@@ -241,13 +308,12 @@ export default function DashboardPage({ onNavigate }) {
 
     // Calculate max revenue for bar chart scaling
     const maxRevenue = Math.max(...weeklyRevenue.map(d => d.revenue), 1);
-
     return (
         <div className="page-content" style={{ position: 'relative' }}>
             <AppHeader title="Dashboard" />
 
             {/* Greeting + Bell Row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                 <div>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: 4 }}>
                         {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -296,6 +362,41 @@ export default function DashboardPage({ onNavigate }) {
                     )}
                 </button>
             </div>
+
+            {/* Date Filter Tabs */}
+            <div className="filter-tabs" style={{ marginBottom: 16 }}>
+                {[
+                    { key: 'today', label: 'Today' },
+                    { key: 'week', label: 'This Week' },
+                    { key: 'month', label: 'This Month' },
+                    { key: 'custom', label: 'Custom' }
+                ].map(({ key, label }) => (
+                    <button
+                        key={key}
+                        className={`filter-tab ${filter === key ? 'active' : ''}`}
+                        onClick={() => setFilter(key)}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Custom Date Range Picker */}
+            {filter === 'custom' && (
+                <div className="date-range" style={{ marginBottom: 16 }}>
+                    <input
+                        type="date"
+                        value={dateRange.startDate}
+                        onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>to</span>
+                    <input
+                        type="date"
+                        value={dateRange.endDate}
+                        onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                    />
+                </div>
+            )}
 
             {/* Quick Actions Grid */}
             <div style={{ marginBottom: 24 }}>
@@ -364,41 +465,72 @@ export default function DashboardPage({ onNavigate }) {
 
             {/* Stats Grid */}
             <div className="stats-grid">
-                <div className="stat-card">
-                    <div className="stat-icon revenue">
-                        <DollarSign size={18} />
-                    </div>
-                    <div className="stat-value">{formatCurrency(stats.totalRevenue)}</div>
-                    <div className="stat-label">Today's Revenue</div>
-                </div>
+                {loading ? (
+                    <>
+                        <div className="stat-card skeleton-shimmer" style={{ gridColumn: 'span 2', minHeight: 110 }}>
+                            <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)' }} />
+                            <div className="skeleton-box" style={{ width: '120px', height: '28px', marginTop: 12 }} />
+                            <div className="skeleton-box" style={{ width: '80px', height: '16px', marginTop: 8 }} />
+                        </div>
+                        <div className="stat-card skeleton-shimmer" style={{ minHeight: 90 }}>
+                            <div className="skeleton-box" style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)' }} />
+                            <div className="skeleton-box" style={{ width: '70px', height: '20px', marginTop: 10 }} />
+                            <div className="skeleton-box" style={{ width: '50px', height: '14px', marginTop: 6 }} />
+                        </div>
+                        <div className="stat-card skeleton-shimmer" style={{ minHeight: 90 }}>
+                            <div className="skeleton-box" style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)' }} />
+                            <div className="skeleton-box" style={{ width: '70px', height: '20px', marginTop: 10 }} />
+                            <div className="skeleton-box" style={{ width: '50px', height: '14px', marginTop: 6 }} />
+                        </div>
+                        <div className="stat-card skeleton-shimmer" style={{ minHeight: 90 }}>
+                            <div className="skeleton-box" style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)' }} />
+                            <div className="skeleton-box" style={{ width: '70px', height: '20px', marginTop: 10 }} />
+                            <div className="skeleton-box" style={{ width: '50px', height: '14px', marginTop: 6 }} />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="stat-card">
+                            <div className="stat-icon revenue">
+                                <DollarSign size={18} />
+                            </div>
+                            <div className="stat-value">{formatCurrency(stats.totalRevenue)}</div>
+                            <div className="stat-label">
+                                {filter === 'today' ? "Today's Revenue" : 
+                                 filter === 'week' ? "This Week's Revenue" : 
+                                 filter === 'month' ? "This Month's Revenue" : "Revenue"}
+                            </div>
+                        </div>
 
-                <div className="stat-card">
-                    <div className="stat-icon net-profit">
-                        {(stats.totalProfit - expenseTotal) >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                    </div>
-                    <div className="stat-value" style={{ color: (stats.totalProfit - expenseTotal) >= 0 ? 'var(--accent-400)' : 'var(--danger-400)' }}>
-                        {(stats.totalProfit - expenseTotal) >= 0 ? '↑ ' : '↓ '}{formatCurrency(Math.abs(stats.totalProfit - expenseTotal))}
-                    </div>
-                    <div className="stat-label">Net Profit</div>
-                </div>
+                        <div className="stat-card">
+                            <div className="stat-icon net-profit">
+                                {(stats.totalProfit - expenseTotal) >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                            </div>
+                            <div className="stat-value" style={{ color: (stats.totalProfit - expenseTotal) >= 0 ? 'var(--accent-400)' : 'var(--danger-400)' }}>
+                                {(stats.totalProfit - expenseTotal) >= 0 ? '↑ ' : '↓ '}{formatCurrency(Math.abs(stats.totalProfit - expenseTotal))}
+                            </div>
+                            <div className="stat-label">Net Profit</div>
+                        </div>
 
-                <div className="stat-card">
-                    <div className="stat-icon transactions">
-                        <ShoppingCart size={18} />
-                    </div>
-                    <div className="stat-value">{stats.transactionCount}</div>
-                    <div className="stat-label">Transactions</div>
-                </div>
+                        <div className="stat-card">
+                            <div className="stat-icon transactions">
+                                <ShoppingCart size={18} />
+                            </div>
+                            <div className="stat-value">{stats.transactionCount}</div>
+                            <div className="stat-label">Transactions</div>
+                        </div>
 
-                <div className="stat-card">
-                    <div className="stat-icon expenses">
-                        <Wallet size={18} />
-                    </div>
-                    <div className="stat-value" style={{ color: expenseTotal > 0 ? 'var(--danger-400)' : 'var(--text-primary)' }}>
-                        {expenseTotal > 0 ? '↓ ' : ''}{formatCurrency(expenseTotal)}
-                    </div>
-                    <div className="stat-label">Expenses</div>
-                </div>
+                        <div className="stat-card">
+                            <div className="stat-icon expenses">
+                                <Wallet size={18} />
+                            </div>
+                            <div className="stat-value" style={{ color: expenseTotal > 0 ? 'var(--danger-400)' : 'var(--text-primary)' }}>
+                                {expenseTotal > 0 ? '↓ ' : ''}{formatCurrency(expenseTotal)}
+                            </div>
+                            <div className="stat-label">Expenses</div>
+                        </div>
+                    </>
+                )}
             </div>
 
 
@@ -410,62 +542,76 @@ export default function DashboardPage({ onNavigate }) {
                         Weekly Revenue
                     </h3>
                 </div>
-                <div style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '16px 14px 12px'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120, marginBottom: 8 }}>
-                        {weeklyRevenue.map((day, i) => {
-                            const height = maxRevenue > 0 ? Math.max((day.revenue / maxRevenue) * 100, 4) : 4;
-                            const isToday = i === weeklyRevenue.length - 1;
-                            return (
+                {loading ? (
+                    <div className="skeleton-shimmer" style={{
+                        height: 154,
+                        borderRadius: 'var(--radius-md)',
+                        padding: '16px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+                            {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                                <div key={n} className="skeleton-box" style={{ flex: 1, height: `${20 + n * 10}%` }} />
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '16px 14px 12px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120, marginBottom: 8 }}>
+                            {weeklyRevenue.map((day, i) => {
+                                const height = maxRevenue > 0 ? Math.max((day.revenue / maxRevenue) * 100, 4) : 4;
+                                const isToday = i === weeklyRevenue.length - 1;
+                                return (
+                                    <div key={i} style={{
+                                        flex: 1,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: 4
+                                    }}>
+                                        {day.revenue > 0 && (
+                                            <div style={{
+                                                fontSize: '0.58rem',
+                                                fontWeight: 700,
+                                                color: isToday ? 'var(--primary-400)' : 'var(--text-muted)',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                {currency}{day.revenue >= 1000 ? `${(day.revenue / 1000).toFixed(1)}k` : day.revenue}
+                                            </div>
+                                        )}
+                                        <div style={{
+                                            width: '100%',
+                                            height: `${height}%`,
+                                            borderRadius: '6px 6px 2px 2px',
+                                            background: isToday
+                                                ? 'linear-gradient(to top, var(--primary-600), var(--primary-400))'
+                                                : 'linear-gradient(to top, rgba(56, 189, 248, 0.25), rgba(56, 189, 248, 0.45))',
+                                            transition: 'height 0.4s ease',
+                                            minHeight: 4
+                                        }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            {weeklyRevenue.map((day, i) => (
                                 <div key={i} style={{
                                     flex: 1,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    gap: 4
+                                    textAlign: 'center',
+                                    fontSize: '0.62rem',
+                                    fontWeight: 600,
+                                    color: i === weeklyRevenue.length - 1 ? 'var(--primary-400)' : 'var(--text-muted)'
                                 }}>
-                                    {day.revenue > 0 && (
-                                        <div style={{
-                                            fontSize: '0.58rem',
-                                            fontWeight: 700,
-                                            color: isToday ? 'var(--primary-400)' : 'var(--text-muted)',
-                                            whiteSpace: 'nowrap'
-                                        }}>
-                                            {currency}{day.revenue >= 1000 ? `${(day.revenue / 1000).toFixed(1)}k` : day.revenue}
-                                        </div>
-                                    )}
-                                    <div style={{
-                                        width: '100%',
-                                        height: `${height}%`,
-                                        borderRadius: '6px 6px 2px 2px',
-                                        background: isToday
-                                            ? 'linear-gradient(to top, var(--primary-600), var(--primary-400))'
-                                            : 'linear-gradient(to top, rgba(56, 189, 248, 0.25), rgba(56, 189, 248, 0.45))',
-                                        transition: 'height 0.4s ease',
-                                        minHeight: 4
-                                    }} />
+                                    {day.label}
                                 </div>
-                            );
-                        })}
+                            ))}
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                        {weeklyRevenue.map((day, i) => (
-                            <div key={i} style={{
-                                flex: 1,
-                                textAlign: 'center',
-                                fontSize: '0.62rem',
-                                fontWeight: 600,
-                                color: i === weeklyRevenue.length - 1 ? 'var(--primary-400)' : 'var(--text-muted)'
-                            }}>
-                                {day.label}
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                )}
             </div>
 
             {/* Low Stock Alerts */}
@@ -475,40 +621,50 @@ export default function DashboardPage({ onNavigate }) {
                         <AlertTriangle size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--warning-500)' }} />
                         Low Stock Items
                     </h3>
-                    <span className="stock-badge low">{lowStock.length} items</span>
+                    {!loading && <span className="stock-badge low">{lowStock.length} items</span>}
                 </div>
-                {lowStock.length === 0 ? (
-                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        All items well stocked 👍
+                {loading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[1, 2, 3].map(n => (
+                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50 }}>
+                                <div className="skeleton-box" style={{ width: '40%', height: 16 }} />
+                            </div>
+                        ))}
                     </div>
                 ) : (
-                    lowStock.slice(0, 5).map(item => {
-                        const suggestion = forecasting.replenishment.find(s => s.id === item.id);
-                        return (
-                            <div key={item.id} className="low-stock-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span className="product-name" style={{ fontWeight: 600 }}>{item.name}</span>
-                                    <span className="stock-count" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                                        {item.stock_quantity} remaining
-                                    </span>
+                    lowStock.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            All items well stocked 👍
+                        </div>
+                    ) : (
+                        lowStock.slice(0, 5).map(item => {
+                            const suggestion = forecasting.replenishment.find(s => s.id === item.id);
+                            return (
+                                <div key={item.id} className="low-stock-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span className="product-name" style={{ fontWeight: 600 }}>{item.name}</span>
+                                        <span className="stock-count" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                            {item.stock_quantity} remaining
+                                        </span>
+                                    </div>
+                                    {suggestion && suggestion.suggested > 0 && (
+                                        <span style={{
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            color: 'var(--warning-400)',
+                                            background: 'rgba(245, 158, 11, 0.08)',
+                                            padding: '2px 8px',
+                                            borderRadius: 6,
+                                            border: '1px solid rgba(245, 158, 11, 0.15)',
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            Suggest +{suggestion.suggested}
+                                        </span>
+                                    )}
                                 </div>
-                                {suggestion && suggestion.suggested > 0 && (
-                                    <span style={{
-                                        fontSize: '0.68rem',
-                                        fontWeight: 700,
-                                        color: 'var(--warning-400)',
-                                        background: 'rgba(245, 158, 11, 0.08)',
-                                        padding: '2px 8px',
-                                        borderRadius: 6,
-                                        border: '1px solid rgba(245, 158, 11, 0.15)',
-                                        whiteSpace: 'nowrap'
-                                    }}>
-                                        Suggest +{suggestion.suggested}
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })
+                            );
+                        })
+                    )
                 )}
             </div>
 
@@ -520,65 +676,92 @@ export default function DashboardPage({ onNavigate }) {
                         Top Selling
                     </h3>
                 </div>
-                {topProducts.length === 0 ? (
-                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        No sales data yet
+                {loading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[1, 2, 3].map(n => (
+                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50, display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div className="skeleton-box" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+                                <div className="skeleton-box" style={{ width: '50%', height: 16 }} />
+                            </div>
+                        ))}
                     </div>
                 ) : (
-                    topProducts.map((item, index) => (
-                        <div key={item.name} className="top-product-item">
-                            <div className="top-product-rank">{index + 1}</div>
-                            <div className="top-product-info">
-                                <div className="top-product-name">{item.name}</div>
-                                <div className="top-product-qty">{item.quantity} units sold</div>
-                            </div>
+                    topProducts.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            No sales data yet
                         </div>
-                    ))
+                    ) : (
+                        topProducts.map((item, index) => (
+                            <div key={item.name} className="top-product-item">
+                                <div className="top-product-rank">{index + 1}</div>
+                                <div className="top-product-info">
+                                    <div className="top-product-name">{item.name}</div>
+                                    <div className="top-product-qty">{item.quantity} units sold</div>
+                                </div>
+                            </div>
+                        ))
+                    )
                 )}
             </div>
 
             {/* Slow Moving Products */}
-            {slowMoving.length > 0 && (
+            {loading ? (
                 <div className="dashboard-section">
                     <div className="dashboard-section-header">
                         <h3>
                             <PackageX size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--warning-500)' }} />
                             Slow Moving
                         </h3>
-                        <span className="stock-badge low" style={{
-                            background: 'rgba(251, 146, 60, 0.12)',
-                            color: 'var(--warning-400)'
-                        }}>⚠ {slowMoving.length} items</span>
                     </div>
-                    {slowMoving.map(item => (
-                        <div key={item.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '12px 16px',
-                            background: 'var(--bg-card)',
-                            border: '1px solid rgba(251, 146, 60, 0.15)',
-                            borderRadius: 'var(--radius-md)',
-                            marginBottom: 8
-                        }}>
-                            <div>
-                                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{item.name}</div>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--warning-400)', marginTop: 2 }}>
-                                    ⚠ No sales in 7 days
-                                </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                                    {item.stock_quantity} in stock
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[1, 2].map(n => (
+                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50 }} />
+                        ))}
+                    </div>
                 </div>
+            ) : (
+                slowMoving.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="dashboard-section-header">
+                            <h3>
+                                <PackageX size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--warning-500)' }} />
+                                Slow Moving
+                            </h3>
+                            <span className="stock-badge low" style={{
+                                background: 'rgba(251, 146, 60, 0.12)',
+                                color: 'var(--warning-400)'
+                            }}>⚠ {slowMoving.length} items</span>
+                        </div>
+                        {slowMoving.map(item => (
+                            <div key={item.id} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 16px',
+                                background: 'var(--bg-card)',
+                                border: '1px solid rgba(251, 146, 60, 0.15)',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: 8
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{item.name}</div>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--warning-400)', marginTop: 2 }}>
+                                        ⚠ No sales in 7 days
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                                        {item.stock_quantity} in stock
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
             )}
 
             {/* Profit Margin Report */}
-            {profitReport.length > 0 && (
+            {loading ? (
                 <div className="dashboard-section">
                     <div className="dashboard-section-header">
                         <h3>
@@ -586,24 +769,43 @@ export default function DashboardPage({ onNavigate }) {
                             Top Profit Margins
                         </h3>
                     </div>
-                    {profitReport.map((item, i) => (
-                        <div key={item.name} className="top-product-item">
-                            <div className="top-product-rank" style={{
-                                background: 'rgba(16, 185, 129, 0.1)',
-                                color: 'var(--accent-400)'
-                            }}>{i + 1}</div>
-                            <div className="top-product-info">
-                                <div className="top-product-name">{item.name}</div>
-                                <div className="top-product-qty">
-                                    Margin: {formatCurrency(item.margin)} ({item.marginPercent.toFixed(0)}%)
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[1, 2].map(n => (
+                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50, display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div className="skeleton-box" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+                                <div className="skeleton-box" style={{ width: '50%', height: 16 }} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                profitReport.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="dashboard-section-header">
+                            <h3>
+                                <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
+                                Top Profit Margins
+                            </h3>
+                        </div>
+                        {profitReport.map((item, i) => (
+                            <div key={item.name} className="top-product-item">
+                                <div className="top-product-rank" style={{
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    color: 'var(--accent-400)'
+                                }}>{i + 1}</div>
+                                <div className="top-product-info">
+                                    <div className="top-product-name">{item.name}</div>
+                                    <div className="top-product-qty">
+                                        Margin: {formatCurrency(item.margin)} ({item.marginPercent.toFixed(0)}%)
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-400)' }}>
+                                    {formatCurrency(item.sellingPrice)}
                                 </div>
                             </div>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-400)' }}>
-                                {formatCurrency(item.sellingPrice)}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )
             )}
 
             {/* Alerts Panel */}

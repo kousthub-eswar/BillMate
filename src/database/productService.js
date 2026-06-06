@@ -1,8 +1,29 @@
 import { supabase, getCurrentUserId } from './supabase';
 
-export async function getAllProducts() {
-    const { data, error } = await supabase.from('products').select('*').order('name');
+export async function getAllProducts(page = null, pageSize = 25, search = '', category = 'All') {
+    let query = supabase.from('products').select('*', { count: 'exact' }).order('name');
+
+    if (search && search.trim()) {
+        const lower = search.toLowerCase().trim();
+        query = query.or(`name.ilike.%${lower}%,barcode.ilike.%${lower}%`);
+    }
+
+    if (category && category !== 'All') {
+        query = query.eq('category', category);
+    }
+
+    if (page !== null) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
     if (error) throw error;
+
+    if (page !== null) {
+        return { data: data || [], count: count || 0 };
+    }
     return data || [];
 }
 

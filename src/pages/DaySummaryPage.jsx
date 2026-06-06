@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
     ArrowLeft, DollarSign, TrendingUp, TrendingDown,
     ShoppingCart, Trophy, AlertTriangle, Wallet,
-    Package, BarChart3, Lock, Banknote, Smartphone
+    Package, BarChart3, Lock, Banknote, Smartphone, RotateCcw
 } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
@@ -21,12 +21,15 @@ export default function DaySummaryPage({ onBack }) {
     const [todaySales, setTodaySales] = useState([]);
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     const showToast = useToast();
+    const [error, setError] = useState(false);
 
     useEffect(() => {
         loadSummary();
     }, []);
 
     const loadSummary = async () => {
+        setLoading(true);
+        setError(false);
         try {
             const [statsData, curr, thresh, expTotal, topProducts, sales] = await Promise.all([
                 getTodayStats(),
@@ -47,6 +50,8 @@ export default function DaySummaryPage({ onBack }) {
             setLowStock(lowStockData);
         } catch (err) {
             console.error('Failed to load day summary:', err);
+            setError(true);
+            showToast('Failed to load day summary', 'error');
         } finally {
             setLoading(false);
         }
@@ -60,6 +65,60 @@ export default function DaySummaryPage({ onBack }) {
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     <BarChart3 size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
                     <div style={{ fontSize: '0.85rem' }}>Loading summary...</div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)',
+                    maxWidth: '400px',
+                    width: '90%',
+                    boxSizing: 'border-box'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(244, 63, 94, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--danger-500)',
+                        marginBottom: '16px'
+                    }}>
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        Connection Failed
+                    </h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Failed to load day summary. Please check your connection and try again.
+                    </p>
+                    <button
+                        onClick={loadSummary}
+                        className="btn btn-primary"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <RotateCcw size={14} /> Retry
+                    </button>
                 </div>
             </div>
         );

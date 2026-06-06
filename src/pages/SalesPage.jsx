@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
-    ShoppingBag, Search, Filter
+    ShoppingBag, Search, Filter, AlertTriangle
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -20,6 +20,15 @@ export default function SalesPage() {
     const [currency, setCurrency] = useState('₹');
     const [searchQuery, setSearchQuery] = useState('');
     const [paymentFilter, setPaymentFilter] = useState('All');
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        setPage(1);
+    }, [filter, dateRange, searchQuery, paymentFilter]);
+
     const showToast = useToast();
 
     const formatCurrency = (val) => {
@@ -34,18 +43,28 @@ export default function SalesPage() {
     };
 
     const loadSales = async () => {
-        let filterParam = filter;
-        if (filter === 'custom' && dateRange.startDate && dateRange.endDate) {
-            filterParam = dateRange;
+        setLoading(true);
+        setError(false);
+        try {
+            let filterParam = filter;
+            if (filter === 'custom' && dateRange.startDate && dateRange.endDate) {
+                filterParam = dateRange;
+            }
+            const result = await getSales(filterParam, page, 25, searchQuery, paymentFilter);
+            setSales(result.data);
+            setTotalCount(result.count);
+        } catch (err) {
+            setError(true);
+            showToast('Failed to load sales', 'error');
+        } finally {
+            setLoading(false);
         }
-        const data = await getSales(filterParam);
-        setSales(data);
     };
 
     useEffect(() => {
         loadSales();
         loadCurrency();
-    }, [filter, dateRange]);
+    }, [filter, dateRange, page, searchQuery, paymentFilter]);
 
     const toggleExpand = async (saleId) => {
         if (expandedSale === saleId) {
@@ -94,25 +113,11 @@ export default function SalesPage() {
         .filter(s => !s.refunded)
         .reduce((sum, s) => sum + s.total, 0);
 
-    // Apply search and payment method filters on top of date-filtered sales
-    const filteredSales = sales.filter(sale => {
-        // Payment method filter
-        if (paymentFilter !== 'All' && sale.payment_method !== paymentFilter) return false;
-        // Search filter
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase().trim();
-            const matchesId = sale.id.toString().includes(q);
-            const matchesCustomer = sale.customer_name && sale.customer_name.toLowerCase().includes(q);
-            if (!matchesId && !matchesCustomer) return false;
-        }
-        return true;
-    });
-
     return (
         <div className="page-content">
             <AppHeader title="Sales">
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                    <div>{sales.length} transactions</div>
+                    <div>{totalCount} transactions</div>
                     <div style={{ color: 'var(--primary-300)', fontWeight: 600 }}>{formatCurrency(totalRevenue)}</div>
                 </div>
             </AppHeader>
@@ -216,18 +221,90 @@ export default function SalesPage() {
                     marginBottom: 10,
                     fontWeight: 600
                 }}>
-                    Showing {filteredSales.length} of {sales.length} transactions
+                    Showing {Math.min(totalCount, (page - 1) * 25 + 1)}-{Math.min(totalCount, page * 25)} of {totalCount} transactions
                 </div>
             )}
 
-            {filteredSales.length === 0 ? (
+            {loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="skeleton-shimmer" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '16px',
+                            borderRadius: 'var(--radius-md)',
+                            minHeight: '72px',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%' }}>
+                                <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                    <div className="skeleton-box" style={{ width: '40%', height: '16px' }} />
+                                    <div className="skeleton-box" style={{ width: '60%', height: '12px' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, width: '20%' }}>
+                                <div className="skeleton-box" style={{ width: '60px', height: '16px' }} />
+                                <div className="skeleton-box" style={{ width: '40px', height: '12px' }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : error ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)',
+                    margin: '20px 0'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(244, 63, 94, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--danger-500)',
+                        marginBottom: '16px'
+                    }}>
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        Connection Failed
+                    </h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Failed to load sales history. Please check your connection and try again.
+                    </p>
+                    <button
+                        onClick={loadSales}
+                        className="btn btn-primary"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <RotateCcw size={14} /> Retry
+                    </button>
+                </div>
+            ) : sales.length === 0 ? (
                 <div className="empty-state">
                     <Clock size={52} />
                     <h3>{searchQuery || paymentFilter !== 'All' ? 'No Matching Sales' : 'No Sales Yet'}</h3>
                     <p>{searchQuery ? `No transactions match "${searchQuery}"` : paymentFilter !== 'All' ? `No ${paymentFilter} transactions found for this period.` : 'No transactions found for this period. Sales will appear here after billing.'}</p>
                 </div>
             ) : (
-                filteredSales.map(sale => (
+                sales.map(sale => (
                     <div
                         key={sale.id}
                         className={`sale-card ${sale.refunded ? 'refunded' : ''}`}
@@ -290,6 +367,42 @@ export default function SalesPage() {
                         )}
                     </div>
                 ))
+            )}
+
+            {totalCount > 25 && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 16,
+                    marginBottom: 20,
+                    padding: '12px 16px',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.82rem',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <button
+                        disabled={page === 1}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Previous
+                    </button>
+                    <span style={{ fontWeight: 500 }}>
+                        Showing {Math.min(totalCount, (page - 1) * 25 + 1)}-{Math.min(totalCount, page * 25)} of {totalCount} results
+                    </span>
+                    <button
+                        disabled={page * 25 >= totalCount}
+                        onClick={() => setPage(p => p + 1)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Next
+                    </button>
+                </div>
             )}
 
             {/* Refund Confirmation */}

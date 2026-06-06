@@ -46,8 +46,21 @@ export async function updateCustomerBalance(id, amount) {
     });
 }
 
-export async function getCustomerHistory(customerId) {
-    const { data } = await supabase.from('sales').select('*').eq('customer_id', customerId).order('date', { ascending: false });
+export async function getCustomerHistory(customerId, page = null, pageSize = 25) {
+    let query = supabase.from('sales').select('*', { count: 'exact' }).eq('customer_id', customerId).order('date', { ascending: false });
+
+    if (page !== null) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    if (page !== null) {
+        return { data: data || [], count: count || 0 };
+    }
     return data || [];
 }
 

@@ -30,7 +30,8 @@ describe('dataTools.js', () => {
     describe('exportAllData', () => {
         it('should fetch data from all tables, create a blob and trigger download link click', async () => {
             const mockData = [{ id: 1, name: 'Item' }];
-            supabase.from.mockReturnValue(createQueryMock(mockData));
+            const queryMock = createQueryMock(mockData);
+            supabase.from.mockReturnValue(queryMock);
 
             const clickMock = vi.fn();
             const originalCreateElement = document.createElement;
@@ -47,7 +48,9 @@ describe('dataTools.js', () => {
 
             await exportAllData();
 
+            expect(getCurrentUserId).toHaveBeenCalled();
             expect(supabase.from).toHaveBeenCalledTimes(9);
+            expect(queryMock.eq).toHaveBeenCalledWith('user_id', 'test-user-id');
             expect(document.createElement).toHaveBeenCalledWith('a');
             expect(clickMock).toHaveBeenCalled();
             expect(window.URL.createObjectURL).toHaveBeenCalled();

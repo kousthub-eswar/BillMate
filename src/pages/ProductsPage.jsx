@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Search, Plus, Edit2, Trash2, Package, X,
     ChevronRight, Star, Minus, Scan, PackagePlus,
-    AlertTriangle, Tags
+    AlertTriangle, Tags, RotateCcw
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -25,7 +25,6 @@ const EMPTY_PRODUCT = {
 };
 
 export default function ProductsPage() {
-    const [products, setProducts] = useState([]);
     const [filtered, setFiltered] = useState([]);
     const [query, setQuery] = useState('');
     const [categories, setCategories] = useState([]);
@@ -49,7 +48,13 @@ export default function ProductsPage() {
     const [editingCategory, setEditingCategory] = useState(null);
     const [editCategoryValue, setEditCategoryValue] = useState('');
     const [showDeleteCategory, setShowDeleteCategory] = useState(null);
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [allProductsForCount, setAllProductsForCount] = useState([]);
     const showToast = useToast();
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
@@ -63,46 +68,59 @@ export default function ProductsPage() {
         setSuppliers(sups);
     };
 
-    const loadProducts = async () => {
-        const all = await getAllProducts();
-        setProducts(all);
+    const loadCategories = async () => {
         const cats = await getCategories();
         setCategories(['All', ...cats]);
     };
 
-    const filterProducts = () => {
-        let result = [...products];
-
-        if (query.trim()) {
-            result = result.filter(p =>
-                p.name.toLowerCase().includes(query.toLowerCase())
-            );
+    const loadProducts = async () => {
+        setLoading(true);
+        setError(false);
+        try {
+            const result = await getAllProducts(page, 25, query, activeCategory);
+            setFiltered(result.data);
+            setTotalCount(result.count);
+        } catch (err) {
+            setError(true);
+            showToast('Failed to load products', 'error');
+        } finally {
+            setLoading(false);
         }
+    };
 
-        if (activeCategory !== 'All') {
-            result = result.filter(p => p.category === activeCategory);
+    const openCategoryManager = async () => {
+        try {
+            const all = await getAllProducts(null);
+            setAllProductsForCount(all);
+            setShowCategoryManager(true);
+        } catch (err) {
+            showToast('Failed to load category stats', 'error');
         }
-
-        setFiltered(result);
     };
 
     useEffect(() => {
-        loadProducts();
         loadCurrency();
         loadSuppliers();
+        loadCategories();
     }, []);
 
     useEffect(() => {
-        filterProducts();
-    }, [query, activeCategory, products]);
+        setPage(1);
+    }, [query, activeCategory]);
+
+    useEffect(() => {
+        loadProducts();
+    }, [page, query, activeCategory]);
 
     const openAdd = () => {
+        setErrors({});
         setEditingProduct(null);
         setFormData(EMPTY_PRODUCT);
         setShowForm(true);
     };
 
     const openEdit = (product) => {
+        setErrors({});
         setEditingProduct(product);
         setFormData({
             name: product.name,
@@ -123,32 +141,55 @@ export default function ProductsPage() {
     };
 
     const handleSave = async () => {
-        if (!formData.name.trim()) {
-            showToast('Product name is required', 'error');
+        const newErrors = {};
+        const trimmedName = formData.name.trim();
+        if (!trimmedName) {
+            newErrors.name = 'Product name is required';
+        }
+
+        const sellingPrice = parseFloat(formData.selling_price);
+        if (isNaN(sellingPrice) || sellingPrice <= 0) {
+            newErrors.selling_price = 'Selling price must be greater than zero';
+        }
+
+        const costPrice = parseFloat(formData.cost_price);
+        if (isNaN(costPrice) || costPrice < 0) {
+            newErrors.cost_price = 'Cost price cannot be negative';
+        }
+
+        const stockQuantity = parseInt(formData.stock_quantity);
+        if (isNaN(stockQuantity) || stockQuantity < 0) {
+            newErrors.stock_quantity = 'Stock quantity cannot be negative';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
 
         try {
+            const payload = {
+                name: trimmedName,
+                selling_price: sellingPrice,
+                cost_price: costPrice,
+                stock_quantity: stockQuantity,
+                category: (formData.category || 'General').trim(),
+                frequently_used: formData.frequently_used ? 1 : 0,
+                barcode: (formData.barcode || '').trim()
+            };
+
             if (editingProduct) {
-                await updateProduct(editingProduct.id, {
-                    ...formData,
-                    selling_price: parseFloat(formData.selling_price) || 0,
-                    cost_price: parseFloat(formData.cost_price) || 0,
-                    stock_quantity: parseInt(formData.stock_quantity) || 0,
-                    frequently_used: formData.frequently_used ? 1 : 0
-                });
+                await updateProduct(editingProduct.id, payload);
                 showToast('Product updated');
             } else {
-                await addProduct({
-                    ...formData,
-                    frequently_used: formData.frequently_used ? 1 : 0,
-                    barcode: formData.barcode || ''
-                });
+                await addProduct(payload);
                 showToast('Product added');
             }
 
             setShowForm(false);
             loadProducts();
+            loadCategories();
         } catch (err) {
             showToast(err.message || 'Failed to save product', 'error');
         }
@@ -159,6 +200,7 @@ export default function ProductsPage() {
         setShowDelete(null);
         showToast('Product deleted');
         loadProducts();
+        loadCategories();
     };
 
     const handleStockAdjust = async () => {
@@ -170,6 +212,7 @@ export default function ProductsPage() {
     };
 
     const openRestock = (product) => {
+        setErrors({});
         setShowRestock(product);
         setRestockQty('');
         setRestockPrice(product.cost_price ? product.cost_price.toString() : '');
@@ -179,14 +222,21 @@ export default function ProductsPage() {
     const handleRestock = async () => {
         const qty = parseInt(restockQty);
         const price = parseFloat(restockPrice);
-        if (!qty || qty <= 0) {
-            showToast('Enter a valid quantity', 'error');
+        const newErrors = {};
+
+        if (isNaN(qty) || qty <= 0) {
+            newErrors.restockQty = 'Quantity must be greater than zero';
+        }
+        if (isNaN(price) || price < 0) {
+            newErrors.restockPrice = 'Purchase price cannot be negative';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
-        if (!price || price < 0) {
-            showToast('Enter a valid price', 'error');
-            return;
-        }
+
         try {
             await quickRestock(
                 showRestock.id,
@@ -206,7 +256,7 @@ export default function ProductsPage() {
         <div className="page-content">
             <AppHeader title="Products">
                 <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryManager(true)} id="manage-categories-btn"
+                    <button className="btn btn-secondary btn-sm" onClick={openCategoryManager} id="manage-categories-btn"
                         style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                     >
                         <Tags size={14} /> Categories
@@ -245,7 +295,79 @@ export default function ProductsPage() {
             )}
 
             {/* Product List */}
-            {filtered.length === 0 ? (
+            {loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="skeleton-shimmer" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '16px',
+                            borderRadius: 'var(--radius-md)',
+                            minHeight: '72px',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%' }}>
+                                <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                    <div className="skeleton-box" style={{ width: '40%', height: '16px' }} />
+                                    <div className="skeleton-box" style={{ width: '60%', height: '12px' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, width: '20%' }}>
+                                <div className="skeleton-box" style={{ width: '60px', height: '16px' }} />
+                                <div className="skeleton-box" style={{ width: '40px', height: '12px' }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : error ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)',
+                    margin: '20px 0'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(244, 63, 94, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--danger-500)',
+                        marginBottom: '16px'
+                    }}>
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        Connection Failed
+                    </h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Failed to load products. Please check your connection and try again.
+                    </p>
+                    <button
+                        onClick={loadProducts}
+                        className="btn btn-primary"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <RotateCcw size={14} /> Retry
+                    </button>
+                </div>
+            ) : filtered.length === 0 ? (
                 <div className="empty-state">
                     <Package size={52} />
                     <h3>{query.trim() ? 'No Matching Products' : 'No Products Yet'}</h3>
@@ -322,6 +444,42 @@ export default function ProductsPage() {
                 })
             )}
 
+            {totalCount > 25 && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 16,
+                    marginBottom: 20,
+                    padding: '12px 16px',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.82rem',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <button
+                        disabled={page === 1}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Previous
+                    </button>
+                    <span style={{ fontWeight: 500 }}>
+                        Showing {Math.min(totalCount, (page - 1) * 25 + 1)}-{Math.min(totalCount, page * 25)} of {totalCount} results
+                    </span>
+                    <button
+                        disabled={page * 25 >= totalCount}
+                        onClick={() => setPage(p => p + 1)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
+
             {/* Add/Edit Product Modal */}
             {showForm && (
                 <div className="modal-overlay" onClick={() => setShowForm(false)}>
@@ -338,9 +496,13 @@ export default function ProductsPage() {
                                 type="text"
                                 placeholder="e.g. Notebook"
                                 value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, name: e.target.value });
+                                    if (errors.name) setErrors(prev => ({ ...prev, name: null }));
+                                }}
                                 id="product-name-input"
                             />
+                            {errors.name && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.name}</p>}
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -351,9 +513,13 @@ export default function ProductsPage() {
                                     type="number"
                                     placeholder="0.00"
                                     value={formData.selling_price}
-                                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, selling_price: e.target.value });
+                                        if (errors.selling_price) setErrors(prev => ({ ...prev, selling_price: null }));
+                                    }}
                                     id="selling-price-input"
                                 />
+                                {errors.selling_price && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.selling_price}</p>}
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Cost Price</label>
@@ -362,9 +528,13 @@ export default function ProductsPage() {
                                     type="number"
                                     placeholder="0.00"
                                     value={formData.cost_price}
-                                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, cost_price: e.target.value });
+                                        if (errors.cost_price) setErrors(prev => ({ ...prev, cost_price: null }));
+                                    }}
                                     id="cost-price-input"
                                 />
+                                {errors.cost_price && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.cost_price}</p>}
                             </div>
                         </div>
 
@@ -376,9 +546,13 @@ export default function ProductsPage() {
                                     type="number"
                                     placeholder="0"
                                     value={formData.stock_quantity}
-                                    onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, stock_quantity: e.target.value });
+                                        if (errors.stock_quantity) setErrors(prev => ({ ...prev, stock_quantity: null }));
+                                    }}
                                     id="stock-input"
                                 />
+                                {errors.stock_quantity && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.stock_quantity}</p>}
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Category</label>
@@ -574,11 +748,15 @@ export default function ProductsPage() {
                                     type="number"
                                     placeholder="0"
                                     value={restockQty}
-                                    onChange={(e) => setRestockQty(e.target.value)}
+                                    onChange={(e) => {
+                                        setRestockQty(e.target.value);
+                                        if (errors.restockQty) setErrors(prev => ({ ...prev, restockQty: null }));
+                                    }}
                                     autoFocus
                                     min="1"
                                     id="restock-qty"
                                 />
+                                {errors.restockQty && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.restockQty}</p>}
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Purchase Price ({currency})</label>
@@ -587,11 +765,15 @@ export default function ProductsPage() {
                                     type="number"
                                     placeholder="0.00"
                                     value={restockPrice}
-                                    onChange={(e) => setRestockPrice(e.target.value)}
+                                    onChange={(e) => {
+                                        setRestockPrice(e.target.value);
+                                        if (errors.restockPrice) setErrors(prev => ({ ...prev, restockPrice: null }));
+                                    }}
                                     min="0"
                                     step="0.01"
                                     id="restock-price"
                                 />
+                                {errors.restockPrice && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.restockPrice}</p>}
                             </div>
                         </div>
 
@@ -661,7 +843,7 @@ export default function ProductsPage() {
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflowY: 'auto' }}>
                                 {categories.filter(c => c !== 'All').map(cat => {
-                                    const productCount = products.filter(p => p.category === cat).length;
+                                    const productCount = allProductsForCount.filter(p => p.category === cat).length;
                                     return (
                                         <div key={cat} style={{
                                             display: 'flex',
@@ -689,6 +871,9 @@ export default function ProductsPage() {
                                                                     showToast(`Renamed "${cat}" → "${editCategoryValue.trim()}"`);
                                                                     setEditingCategory(null);
                                                                     loadProducts();
+                                                                    loadCategories();
+                                                                    const all = await getAllProducts(null);
+                                                                    setAllProductsForCount(all);
                                                                 } catch (err) {
                                                                     showToast(err.message || 'Rename failed', 'error');
                                                                 }
@@ -706,6 +891,9 @@ export default function ProductsPage() {
                                                                 showToast(`Renamed "${cat}" → "${editCategoryValue.trim()}"`);
                                                                 setEditingCategory(null);
                                                                 loadProducts();
+                                                                loadCategories();
+                                                                const all = await getAllProducts(null);
+                                                                setAllProductsForCount(all);
                                                             } catch (err) {
                                                                 showToast(err.message || 'Rename failed', 'error');
                                                             }
@@ -776,6 +964,9 @@ export default function ProductsPage() {
                             showToast(`Category "${showDeleteCategory}" removed`);
                             setShowDeleteCategory(null);
                             loadProducts();
+                            loadCategories();
+                            const all = await getAllProducts(null);
+                            setAllProductsForCount(all);
                         } catch (err) {
                             showToast(err.message || 'Delete failed', 'error');
                         }

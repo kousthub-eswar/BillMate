@@ -4,7 +4,8 @@ import {
     getTodayExpenses,
     getExpensesByDate,
     deleteExpense,
-    getTodayExpenseTotal
+    getTodayExpenseTotal,
+    getExpenseTotal
 } from '../expenseService';
 import { supabase, getCurrentUserId } from '../supabase';
 import { createQueryMock } from '../../test/supabaseMock';
@@ -97,6 +98,19 @@ describe('expenseService.js', () => {
             const total = await getTodayExpenseTotal();
 
             expect(total).toBe(36);
+        });
+    });
+
+    describe('getExpenseTotal', () => {
+        it('should return total sum of expenses in date range', async () => {
+            const list = [{ amount: 50 }, { amount: 75.25 }];
+            supabase.from.mockReturnValue(createQueryMock(list));
+
+            const total = await getExpenseTotal('2026-05-01', '2026-05-31');
+
+            expect(total).toBe(125.25);
+            expect(supabase.from().gte).toHaveBeenCalledWith('date', expect.stringContaining('2026-05-01'));
+            expect(supabase.from().lte).toHaveBeenCalledWith('date', expect.stringContaining('2026-05-31'));
         });
     });
 });

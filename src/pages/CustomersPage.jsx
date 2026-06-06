@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Users, UserPlus, Search, Phone,
-    History
+    History, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import {
@@ -21,8 +21,13 @@ export default function CustomersPage() {
     const [formData, setFormData] = useState({ name: '', phone: '' });
     const [settleAmount, setSettleAmount] = useState('');
     const [currency, setCurrency] = useState('₹');
+    const [errors, setErrors] = useState({});
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyTotalCount, setHistoryTotalCount] = useState(0);
 
     const showToast = useToast();
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     const loadCurrency = async () => {
         const c = await getSetting('currency');
@@ -30,15 +35,32 @@ export default function CustomersPage() {
     };
 
     const loadCustomers = async () => {
-        const all = await getAllCustomers();
-        // Sort by balance (highest debt first)
-        all.sort((a, b) => b.balance - a.balance);
-        setCustomers(all);
+        setLoading(true);
+        setError(false);
+        try {
+            const all = await getAllCustomers();
+            all.sort((a, b) => b.balance - a.balance);
+            setCustomers(all);
+        } catch (err) {
+            setError(true);
+            showToast('Failed to load customers', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSearch = async (val) => {
-        const results = await searchCustomers(val);
-        setCustomers(results);
+        setLoading(true);
+        setError(false);
+        try {
+            const results = await searchCustomers(val);
+            setCustomers(results);
+        } catch (err) {
+            setError(true);
+            showToast('Failed to search customers', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -55,13 +77,28 @@ export default function CustomersPage() {
     }, [query]);
 
     const handleAdd = async () => {
-        if (!formData.name.trim()) {
-            showToast('Name is required', 'error');
+        const newErrors = {};
+        const trimmedName = formData.name.trim();
+        const trimmedPhone = (formData.phone || '').trim();
+
+        if (!trimmedName) {
+            newErrors.name = 'Customer name is required';
+        } else if (trimmedName.length > 100) {
+            newErrors.name = 'Customer name cannot exceed 100 characters';
+        }
+
+        if (trimmedPhone && !/^[+\d\s]+$/.test(trimmedPhone)) {
+            newErrors.phone = 'Phone number can only contain digits, spaces, and +';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
 
         try {
-            await addCustomer(formData);
+            await addCustomer({ name: trimmedName, phone: trimmedPhone });
             showToast('Customer added');
             setShowAddModal(false);
             setFormData({ name: '', phone: '' });
@@ -73,14 +110,20 @@ export default function CustomersPage() {
 
     const handleSettle = async () => {
         const amount = parseFloat(settleAmount);
-        if (!amount || amount <= 0) {
-            showToast('Enter valid amount', 'error');
+        const newErrors = {};
+
+        if (isNaN(amount) || amount <= 0) {
+            newErrors.settleAmount = 'Amount must be greater than zero';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
 
         try {
-            // Negative amount to reduce balance
-            await updateCustomerBalance(showSettleModal.id, -amount, true);
+            await updateCustomerBalance(showSettleModal.id, amount);
 
             showToast('Payment settled');
             setShowSettleModal(null);
@@ -91,16 +134,33 @@ export default function CustomersPage() {
         }
     };
 
+    const loadHistory = async (customer) => {
+        if (!customer) return;
+        try {
+            const result = await getCustomerHistory(customer.id, historyPage, 25);
+            setHistory(result.data);
+            setHistoryTotalCount(result.count);
+        } catch (err) {
+            showToast('Failed to load transaction history', 'error');
+        }
+    };
+
     const viewHistory = async (customer) => {
-        const hist = await getCustomerHistory(customer.id);
-        setHistory(hist.reverse()); // Newest first
+        setHistoryPage(1);
+        setHistory([]);
         setShowHistoryModal(customer);
     };
+
+    useEffect(() => {
+        if (showHistoryModal) {
+            loadHistory(showHistoryModal);
+        }
+    }, [showHistoryModal, historyPage]);
 
     return (
         <div className="page-content">
             <AppHeader title="Customers">
-                <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
+                <button className="btn btn-primary btn-sm" onClick={() => { setErrors({}); setShowAddModal(true); }}>
                     <UserPlus size={16} /> Add
                 </button>
             </AppHeader>
@@ -126,14 +186,94 @@ export default function CustomersPage() {
 
             {/* List */}
             <div className="customer-list">
-                {customers.length === 0 ? (
+                {loading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+                        {[1, 2, 3, 4, 5].map(i => (
+                            <div key={i} className="skeleton-shimmer" style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '16px',
+                                borderRadius: 'var(--radius-md)',
+                                minHeight: '72px',
+                                boxSizing: 'border-box'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%' }}>
+                                    <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0 }} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                        <div className="skeleton-box" style={{ width: '40%', height: '16px' }} />
+                                        <div className="skeleton-box" style={{ width: '60%', height: '12px' }} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, width: '20%' }}>
+                                    <div className="skeleton-box" style={{ width: '60px', height: '16px' }} />
+                                    <div className="skeleton-box" style={{ width: '40px', height: '12px' }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : error ? (
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-lg)',
+                        margin: '20px 0'
+                    }}>
+                        <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            background: 'rgba(244, 63, 94, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--danger-500)',
+                            marginBottom: '16px'
+                        }}>
+                            <AlertTriangle size={24} />
+                        </div>
+                        <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                            Connection Failed
+                        </h3>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                            Failed to load customers. Please check your connection and try again.
+                        </p>
+                        <button
+                            onClick={() => {
+                                if (query.trim()) {
+                                    handleSearch(query);
+                                } else {
+                                    loadCustomers();
+                                }
+                            }}
+                            className="btn btn-primary"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '10px 20px',
+                                fontSize: '0.85rem'
+                            }}
+                        >
+                            <RotateCcw size={14} /> Retry
+                        </button>
+                    </div>
+                ) : customers.length === 0 ? (
                     <div className="empty-state">
                         <Users size={52} />
-                        <h3>No Customers Yet</h3>
-                        <p>Add customers to track credit (udhaar) and payment history.</p>
-                        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-                            <UserPlus size={18} /> Add Customer
-                        </button>
+                        <h3>{query.trim() ? 'No Matching Customers' : 'No Customers Yet'}</h3>
+                        <p>{query.trim() ? `No customers match "${query}"` : 'Add customers to track credit (udhaar) and payment history.'}</p>
+                        {!query.trim() && (
+                            <button className="btn btn-primary" onClick={() => { setErrors({}); setShowAddModal(true); }}>
+                                <UserPlus size={18} /> Add Customer
+                            </button>
+                        )}
                     </div>
                 ) : (
                     customers.map(c => (
@@ -155,7 +295,7 @@ export default function CustomersPage() {
                                 {c.balance > 0 && (
                                     <button
                                         className="btn-settle"
-                                        onClick={(e) => { e.stopPropagation(); setShowSettleModal(c); }}
+                                        onClick={(e) => { e.stopPropagation(); setErrors({}); setShowSettleModal(c); }}
                                     >
                                         Settle
                                     </button>
@@ -178,10 +318,14 @@ export default function CustomersPage() {
                             <input
                                 className="form-input"
                                 value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, name: e.target.value });
+                                    if (errors.name) setErrors(prev => ({ ...prev, name: null }));
+                                }}
                                 placeholder="e.g. Raju Bhai"
                                 autoFocus
                             />
+                            {errors.name && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.name}</p>}
                         </div>
 
                         <div className="form-group">
@@ -190,9 +334,13 @@ export default function CustomersPage() {
                                 className="form-input"
                                 type="tel"
                                 value={formData.phone}
-                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, phone: e.target.value });
+                                    if (errors.phone) setErrors(prev => ({ ...prev, phone: null }));
+                                }}
                                 placeholder="Optional"
                             />
+                            {errors.phone && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.phone}</p>}
                         </div>
 
                         <button className="btn btn-primary btn-block" onClick={handleAdd}>
@@ -222,11 +370,15 @@ export default function CustomersPage() {
                                 className="form-input"
                                 type="number"
                                 value={settleAmount}
-                                onChange={(e) => setSettleAmount(e.target.value)}
+                                onChange={(e) => {
+                                    setSettleAmount(e.target.value);
+                                    if (errors.settleAmount) setErrors(prev => ({ ...prev, settleAmount: null }));
+                                }}
                                 placeholder="0.00"
                                 style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 600 }}
                                 autoFocus
                             />
+                            {errors.settleAmount && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500, textAlign: 'center' }}>{errors.settleAmount}</p>}
                         </div>
 
                         <button
@@ -273,11 +425,44 @@ export default function CustomersPage() {
                                                 textDecoration: h.refunded ? 'line-through' : 'none',
                                                 fontSize: '1.1rem'
                                             }}>
-                                                {isPayment ? '+' : '-'}{currency}{isPayment ? h.settle_amount.toFixed(2) : h.total.toFixed(2)}
+                                                {isPayment ? '+' : '-'}{currency}{isPayment ? (h.settle_amount || 0).toFixed(2) : (h.total || 0).toFixed(2)}
                                             </div>
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {historyTotalCount > 25 && (
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginTop: 16,
+                                padding: '12px 0 0',
+                                borderTop: '1px solid var(--border-color)',
+                                fontSize: '0.8rem',
+                                color: 'var(--text-secondary)'
+                            }}>
+                                <button
+                                    disabled={historyPage === 1}
+                                    onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '4px 10px' }}
+                                >
+                                    Prev
+                                </button>
+                                <span style={{ fontWeight: 500 }}>
+                                    Showing {Math.min(historyTotalCount, (historyPage - 1) * 25 + 1)}-{Math.min(historyTotalCount, historyPage * 25)} of {historyTotalCount}
+                                </span>
+                                <button
+                                    disabled={historyPage * 25 >= historyTotalCount}
+                                    onClick={() => setHistoryPage(p => p + 1)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '4px 10px' }}
+                                >
+                                    Next
+                                </button>
                             </div>
                         )}
                     </div>

@@ -97,6 +97,7 @@ export default function BillingPage() {
     const [showAddCustomer, setShowAddCustomer] = useState(false);
     const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
     const showToast = useToast();
+    const [errors, setErrors] = useState({});
 
     // Loyalty points states
     const [customerLoyaltyPoints, setCustomerLoyaltyPoints] = useState(0);
@@ -280,7 +281,18 @@ export default function BillingPage() {
     // Calculate discount
     const parsedDiscount = parseFloat(discountValue) || 0;
     let discountAmount = 0;
-    if (parsedDiscount > 0) {
+    let discountError = '';
+    if (discountValue !== '') {
+        if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+            discountError = 'Discount cannot be negative';
+        } else if (discountType === 'flat' && parsedDiscount > cartSubtotal) {
+            discountError = 'Discount cannot exceed subtotal';
+        } else if (discountType === 'percent' && parsedDiscount > 100) {
+            discountError = 'Discount percentage cannot exceed 100%';
+        }
+    }
+
+    if (parsedDiscount > 0 && !discountError) {
         if (discountType === 'percent') {
             discountAmount = Math.min((cartSubtotal * parsedDiscount) / 100, cartSubtotal);
         } else {
@@ -372,18 +384,39 @@ export default function BillingPage() {
     }, [cart.length, cartOpen]);
 
     const handleCreateCustomer = async () => {
-        if (!newCustomer.name.trim()) {
-            showToast('Customer name is required', 'error');
+        const newErrors = {};
+        const trimmedName = newCustomer.name.trim();
+        const trimmedPhone = (newCustomer.phone || '').trim();
+
+        if (!trimmedName) {
+            newErrors.customerName = 'Customer name is required';
+        } else if (trimmedName.length > 100) {
+            newErrors.customerName = 'Customer name cannot exceed 100 characters';
+        }
+
+        if (trimmedPhone && !/^[+\d\s]+$/.test(trimmedPhone)) {
+            newErrors.customerPhone = 'Phone number can only contain digits, spaces, and +';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
             return;
         }
+
         try {
-            const customerId = await addCustomer(newCustomer);
+            const customerId = await addCustomer({
+                name: trimmedName,
+                phone: trimmedPhone,
+                email: (newCustomer.email || '').trim()
+            });
             const updatedCustomers = await getAllCustomers();
             setCustomers(updatedCustomers);
             const newlyCreated = updatedCustomers.find(c => c.id === customerId);
             setSelectedCustomer(newlyCreated || null);
             setNewCustomer({ name: '', phone: '', email: '' });
             setShowAddCustomer(false);
+            setErrors({});
             showToast('Customer created successfully');
             if (paymentMethod === 'Credit') {
                 // Keep credit if it was selected
@@ -467,6 +500,7 @@ export default function BillingPage() {
                         <button
                             className="pos-quick-add-trigger"
                             onClick={() => {
+                                setErrors({});
                                 setQuickAddForm({ name: query.trim(), selling_price: '', cost_price: '', stock_quantity: '', category: '' });
                                 setShowQuickAdd(true);
                             }}
@@ -649,13 +683,13 @@ export default function BillingPage() {
                                         value={discountValue}
                                         onChange={(e) => {
                                             let val = e.target.value;
-                                            if (discountType === 'percent' && parseFloat(val) > 100) val = '100';
                                             setDiscountValue(val);
                                         }}
                                         className="pos-discount-input"
                                         id="discount-input"
                                     />
                                 </div>
+                                {discountError && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{discountError}</p>}
                                 {discountAmount > 0 && (
                                     <div className="pos-discount-preview">
                                         <span>Saving</span>
@@ -687,8 +721,17 @@ export default function BillingPage() {
                         {/* Checkout Button */}
                         <button
                             className="pos-checkout-btn"
-                            onClick={() => { setCartOpen(false); setShowCheckout(true); }}
+                            onClick={() => {
+                                if (discountError) {
+                                    showToast('Please correct the discount error', 'error');
+                                    return;
+                                }
+                                setCartOpen(false);
+                                setShowCheckout(true);
+                            }}
                             id="checkout-button"
+                            disabled={!!discountError}
+                            style={{ opacity: discountError ? 0.5 : 1 }}
                         >
                             Continue to Checkout
                             <ChevronRight size={20} />
@@ -752,7 +795,7 @@ export default function BillingPage() {
                                     <button
                                         className="btn btn-sm"
                                         style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary-400)' }}
-                                        onClick={() => setShowAddCustomer(true)}
+                                        onClick={() => { setErrors({}); setShowAddCustomer(true); }}
                                     >
                                         + New
                                     </button>
@@ -770,17 +813,25 @@ export default function BillingPage() {
                                         type="text"
                                         placeholder="Customer Name *"
                                         value={newCustomer.name}
-                                        onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
+                                        onChange={e => {
+                                            setNewCustomer({...newCustomer, name: e.target.value});
+                                            if (errors.customerName) setErrors(prev => ({ ...prev, customerName: null }));
+                                        }}
                                         style={{ marginBottom: 8 }}
                                     />
+                                    {errors.customerName && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: -4, marginBottom: 8, fontWeight: 500 }}>{errors.customerName}</p>}
                                     <input
                                         className="form-input"
                                         type="tel"
                                         placeholder="Phone Number (Optional)"
                                         value={newCustomer.phone}
-                                        onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
+                                        onChange={e => {
+                                            setNewCustomer({...newCustomer, phone: e.target.value});
+                                            if (errors.customerPhone) setErrors(prev => ({ ...prev, customerPhone: null }));
+                                        }}
                                         style={{ marginBottom: 12 }}
                                     />
+                                    {errors.customerPhone && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: -8, marginBottom: 12, fontWeight: 500 }}>{errors.customerPhone}</p>}
                                     <button className="btn btn-primary btn-block btn-sm" onClick={handleCreateCustomer}>
                                         Save & Select
                                     </button>
@@ -791,7 +842,7 @@ export default function BillingPage() {
                                         className="form-input"
                                         value={selectedCustomer?.id || ''}
                                         onChange={(e) => {
-                                            const c = customers.find(c => c.id === parseInt(e.target.value));
+                                            const c = customers.find(c => String(c.id) === e.target.value);
                                             setSelectedCustomer(c || null);
                                             loadCustomerLoyalty(c || null);
                                             if (e.target.value === '' && paymentMethod === 'Credit') {
@@ -1048,144 +1099,12 @@ export default function BillingPage() {
                                 <button
                                     className="btn btn-secondary btn-block"
                                     onClick={() => {
-                                        if (!activeSaleRecord) return;
-                                        const sale = activeSaleRecord;
-                                        const items = sale.items || [];
-                                        const cur = settings.currency || '₹';
-                                        const shopName = settings.shop_name || 'BillMate';
-                                        const subtotal = sale.subtotal || (sale.total + (sale.discount_amount || 0));
-                                        
-                                        const itemRows = items.map(item => `
-                                            <tr>
-                                                <td>${item.product_name || item.name}</td>
-                                                <td style="text-align:center">${item.quantity}</td>
-                                                <td style="text-align:right;font-weight:700">${cur}${Number(item.subtotal || item.selling_price * item.quantity).toFixed(2)}</td>
-                                            </tr>
-                                        `).join('');
-
-                                        const printWindow = window.open('', '_blank');
-                                        printWindow.document.write(`
-                                            <html>
-                                                <head>
-                                                    <title>Receipt #${sale.id}</title>
-                                                    <style>
-                                                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                                                        body {
-                                                            font-family: 'Courier New', Courier, monospace;
-                                                            width: 280px;
-                                                            margin: 0 auto;
-                                                            padding: 12px 8px;
-                                                            color: #000;
-                                                            background: #fff;
-                                                            font-size: 12px;
-                                                            line-height: 1.4;
-                                                        }
-                                                        .header { text-align: center; margin-bottom: 8px; }
-                                                        .header h2 {
-                                                            font-size: 16px;
-                                                            font-weight: 900;
-                                                            text-transform: uppercase;
-                                                            letter-spacing: 2px;
-                                                            margin-bottom: 2px;
-                                                        }
-                                                        .header .meta {
-                                                            font-size: 9px;
-                                                            color: #666;
-                                                        }
-                                                        .divider {
-                                                            border: none;
-                                                            border-top: 1px dashed #333;
-                                                            margin: 6px 0;
-                                                        }
-                                                        table {
-                                                            width: 100%;
-                                                            border-collapse: collapse;
-                                                        }
-                                                        th {
-                                                            font-size: 9px;
-                                                            text-transform: uppercase;
-                                                            letter-spacing: 0.5px;
-                                                            border-bottom: 1px solid #000;
-                                                            padding: 4px 0;
-                                                            text-align: left;
-                                                        }
-                                                        th:nth-child(2) { text-align: center; }
-                                                        th:last-child { text-align: right; }
-                                                        td {
-                                                            padding: 3px 0;
-                                                            font-size: 11px;
-                                                            vertical-align: top;
-                                                        }
-                                                        .totals { margin-top: 4px; }
-                                                        .totals .row {
-                                                            display: flex;
-                                                            justify-content: space-between;
-                                                            padding: 2px 0;
-                                                            font-size: 11px;
-                                                        }
-                                                        .totals .row.grand {
-                                                            font-size: 14px;
-                                                            font-weight: 900;
-                                                            border-top: 2px solid #000;
-                                                            margin-top: 4px;
-                                                            padding-top: 6px;
-                                                        }
-                                                        .totals .row.discount { color: #666; }
-                                                        .footer {
-                                                            text-align: center;
-                                                            margin-top: 12px;
-                                                            font-size: 10px;
-                                                            color: #666;
-                                                        }
-                                                        .footer .thanks {
-                                                            font-size: 12px;
-                                                            font-weight: 700;
-                                                            color: #000;
-                                                            margin-top: 6px;
-                                                        }
-                                                        @media print {
-                                                            body { width: 100%; padding: 0 4px; }
-                                                        }
-                                                    </style>
-                                                </head>
-                                                <body onload="window.print(); window.close();">
-                                                    <div class="header">
-                                                        <h2>${shopName}</h2>
-                                                        <div class="meta">Invoice #${sale.id}</div>
-                                                        <div class="meta">${new Date(sale.date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
-                                                    </div>
-                                                    <hr class="divider">
-                                                    <table>
-                                                        <thead>
-                                                            <tr><th>Item</th><th>Qty</th><th>Amt</th></tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            ${itemRows}
-                                                        </tbody>
-                                                    </table>
-                                                    <hr class="divider">
-                                                    <div class="totals">
-                                                        ${sale.discount_amount > 0 ? `
-                                                            <div class="row"><span>Subtotal</span><span>${cur}${Number(subtotal).toFixed(2)}</span></div>
-                                                            <div class="row discount"><span>Discount</span><span>-${cur}${Number(sale.discount_amount).toFixed(2)}</span></div>
-                                                        ` : ''}
-                                                        <div class="row grand"><span>TOTAL</span><span>${cur}${Number(sale.total).toFixed(2)}</span></div>
-                                                        <div class="row"><span>Payment</span><span>${sale.payment_method}</span></div>
-                                                    </div>
-                                                    <hr class="divider">
-                                                    <div class="footer">
-                                                        <p>Powered by BillMate POS</p>
-                                                        <div class="thanks">Thank you! Visit again.</div>
-                                                    </div>
-                                                </body>
-                                            </html>
-                                        `);
-                                        printWindow.document.close();
+                                        window.print();
                                     }}
                                     style={{ marginBottom: 8 }}
-                                    id="print-thermal-receipt"
+                                    id="print-receipt-btn"
                                 >
-                                    Print Receipt (Thermal)
+                                    Print Receipt
                                 </button>
 
 
@@ -1220,9 +1139,13 @@ export default function BillingPage() {
                                     type="text"
                                     placeholder="e.g. Maggi Noodles"
                                     value={quickAddForm.name}
-                                    onChange={(e) => setQuickAddForm(prev => ({ ...prev, name: e.target.value }))}
+                                    onChange={(e) => {
+                                        setQuickAddForm(prev => ({ ...prev, name: e.target.value }));
+                                        if (errors.quickAddName) setErrors(prev => ({ ...prev, quickAddName: null }));
+                                    }}
                                     id="quick-add-name"
                                 />
+                                {errors.quickAddName && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.quickAddName}</p>}
                             </div>
 
                             <div style={{ display: 'flex', gap: 10 }}>
@@ -1234,9 +1157,13 @@ export default function BillingPage() {
                                         inputMode="decimal"
                                         placeholder="0.00"
                                         value={quickAddForm.selling_price}
-                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, selling_price: e.target.value }))}
+                                        onChange={(e) => {
+                                            setQuickAddForm(prev => ({ ...prev, selling_price: e.target.value }));
+                                            if (errors.quickAddSellingPrice) setErrors(prev => ({ ...prev, quickAddSellingPrice: null }));
+                                        }}
                                         id="quick-add-selling-price"
                                     />
+                                    {errors.quickAddSellingPrice && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.quickAddSellingPrice}</p>}
                                 </div>
                                 <div className="form-group" style={{ flex: 1 }}>
                                     <label className="form-label">Cost Price *</label>
@@ -1246,9 +1173,13 @@ export default function BillingPage() {
                                         inputMode="decimal"
                                         placeholder="0.00"
                                         value={quickAddForm.cost_price}
-                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, cost_price: e.target.value }))}
+                                        onChange={(e) => {
+                                            setQuickAddForm(prev => ({ ...prev, cost_price: e.target.value }));
+                                            if (errors.quickAddCostPrice) setErrors(prev => ({ ...prev, quickAddCostPrice: null }));
+                                        }}
                                         id="quick-add-cost-price"
                                     />
+                                    {errors.quickAddCostPrice && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.quickAddCostPrice}</p>}
                                 </div>
                             </div>
 
@@ -1261,9 +1192,13 @@ export default function BillingPage() {
                                         inputMode="numeric"
                                         placeholder="0"
                                         value={quickAddForm.stock_quantity}
-                                        onChange={(e) => setQuickAddForm(prev => ({ ...prev, stock_quantity: e.target.value }))}
+                                        onChange={(e) => {
+                                            setQuickAddForm(prev => ({ ...prev, stock_quantity: e.target.value }));
+                                            if (errors.quickAddStock) setErrors(prev => ({ ...prev, quickAddStock: null }));
+                                        }}
                                         id="quick-add-stock"
                                     />
+                                    {errors.quickAddStock && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.quickAddStock}</p>}
                                 </div>
                                 <div className="form-group" style={{ flex: 1 }}>
                                     <label className="form-label">Category</label>
@@ -1285,34 +1220,56 @@ export default function BillingPage() {
                                     </div>
                                 </div>
                             </div>
-
                             <button
                                 className="btn btn-success btn-lg btn-block"
-                                disabled={quickAddLoading || !quickAddForm.name.trim() || !quickAddForm.selling_price || !quickAddForm.cost_price || !quickAddForm.stock_quantity}
+                                disabled={quickAddLoading}
                                 onClick={async () => {
+                                    const newErrors = {};
+                                    const trimmedName = quickAddForm.name.trim();
+                                    const sellingPrice = parseFloat(quickAddForm.selling_price);
+                                    const costPrice = parseFloat(quickAddForm.cost_price);
+                                    const stockQuantity = parseInt(quickAddForm.stock_quantity);
+
+                                    if (!trimmedName) {
+                                        newErrors.quickAddName = 'Product name is required';
+                                    }
+                                    if (isNaN(sellingPrice) || sellingPrice <= 0) {
+                                        newErrors.quickAddSellingPrice = 'Selling price must be greater than zero';
+                                    }
+                                    if (isNaN(costPrice) || costPrice < 0) {
+                                        newErrors.quickAddCostPrice = 'Cost price cannot be negative';
+                                    }
+                                    if (isNaN(stockQuantity) || stockQuantity < 0) {
+                                        newErrors.quickAddStock = 'Stock quantity cannot be negative';
+                                    }
+
+                                    if (Object.keys(newErrors).length > 0) {
+                                        setErrors(newErrors);
+                                        showToast('Please correct the validation errors', 'error');
+                                        return;
+                                    }
+
                                     setQuickAddLoading(true);
                                     try {
-                                        const productId = await addProduct({
-                                            name: quickAddForm.name.trim(),
-                                            selling_price: quickAddForm.selling_price,
-                                            cost_price: quickAddForm.cost_price,
-                                            stock_quantity: quickAddForm.stock_quantity,
-                                            category: quickAddForm.category || 'General'
-                                        });
+                                        const payload = {
+                                            name: trimmedName,
+                                            selling_price: sellingPrice,
+                                            cost_price: costPrice,
+                                            stock_quantity: stockQuantity,
+                                            category: (quickAddForm.category || 'General').trim()
+                                        };
+                                        const productId = await addProduct(payload);
                                         // Add the newly created product to cart
                                         const newProduct = {
                                             id: productId,
-                                            name: quickAddForm.name.trim(),
-                                            selling_price: parseFloat(quickAddForm.selling_price),
-                                            cost_price: parseFloat(quickAddForm.cost_price),
-                                            stock_quantity: parseInt(quickAddForm.stock_quantity),
-                                            category: quickAddForm.category || 'General'
+                                            ...payload
                                         };
                                         addToCart(newProduct);
                                         setShowQuickAdd(false);
                                         setQuery('');
                                         setSearchResults([]);
                                         loadCategories();
+                                        setErrors({});
                                         showToast(`${newProduct.name} created & added to cart`);
                                     } catch (err) {
                                         showToast(err.message || 'Failed to add product', 'error');
@@ -1329,6 +1286,72 @@ export default function BillingPage() {
                     </div>
                 )
             }
+
+            {activeSaleRecord && (
+                <div className="print-receipt-window">
+                    <div className="receipt-header">
+                        <h2>{settings.shop_name || 'BillMate'}</h2>
+                        {settings.shop_phone && <p>Phone: {settings.shop_phone}</p>}
+                        {settings.shop_address && <p>{settings.shop_address}</p>}
+                        <div className="receipt-divider" />
+                        <p style={{ fontWeight: 'bold' }}>INVOICE #{activeSaleRecord.id}</p>
+                        <p>Date: {new Date(activeSaleRecord.date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                    </div>
+                    
+                    <div className="receipt-divider" />
+                    
+                    <table className="receipt-items">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th style={{ textAlign: 'center' }}>Qty</th>
+                                <th style={{ textAlign: 'right' }}>Price</th>
+                                <th style={{ textAlign: 'right' }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(activeSaleRecord.items || []).map((item, idx) => (
+                                <tr key={idx}>
+                                    <td>{item.product_name || item.name}</td>
+                                    <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                                    <td style={{ textAlign: 'right' }}>{settings.currency || '₹'}{Number(item.selling_price || 0).toFixed(2)}</td>
+                                    <td style={{ textAlign: 'right' }}>{settings.currency || '₹'}{Number(item.subtotal || (item.selling_price * item.quantity)).toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    
+                    <div className="receipt-divider" />
+                    
+                    <div className="receipt-totals">
+                        <div className="total-row">
+                            <span>Subtotal</span>
+                            <span>{settings.currency || '₹'}{Number(activeSaleRecord.subtotal || (activeSaleRecord.total + (activeSaleRecord.discount_amount || 0))).toFixed(2)}</span>
+                        </div>
+                        {activeSaleRecord.discount_amount > 0 && (
+                            <div className="total-row discount">
+                                <span>Discount ({activeSaleRecord.discount_type === 'percent' ? `${activeSaleRecord.discount_value}%` : 'Flat'})</span>
+                                <span>-{settings.currency || '₹'}{Number(activeSaleRecord.discount_amount).toFixed(2)}</span>
+                            </div>
+                        )}
+                        <div className="total-row grand-total">
+                            <span>GRAND TOTAL</span>
+                            <span>{settings.currency || '₹'}{Number(activeSaleRecord.total).toFixed(2)}</span>
+                        </div>
+                        <div className="total-row">
+                            <span>Payment Method</span>
+                            <span style={{ fontWeight: 'bold' }}>{activeSaleRecord.payment_method}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="receipt-divider" />
+                    
+                    <div className="receipt-footer">
+                        <p>Powered by BillMate POS</p>
+                        <div className="thank-you">Thank you! Visit again.</div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

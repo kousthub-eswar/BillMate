@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Package, Plus, Search, Truck, X, ShoppingCart,
-    Calendar, Trash2, ChevronDown, ChevronUp
+    Calendar, Trash2, ChevronDown, ChevronUp, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -23,6 +23,9 @@ export default function PurchasesPage() {
     const [expandedItems, setExpandedItems] = useState([]);
     const [showDelete, setShowDelete] = useState(null);
     const [supplierNames, setSupplierNames] = useState({});
+    const [page, setPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [periodTotalCost, setPeriodTotalCost] = useState(0);
 
     // Form state
     const [selectedSupplier, setSelectedSupplier] = useState('');
@@ -32,20 +35,36 @@ export default function PurchasesPage() {
     const [showProductPicker, setShowProductPicker] = useState(false);
 
     const showToast = useToast();
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     const loadPurchases = async () => {
-        const data = await getPurchases(filter);
-        setPurchases(data);
+        setLoading(true);
+        setError(false);
+        try {
+            const result = await getPurchases(filter, page, 25);
+            setPurchases(result.data);
+            setTotalCount(result.count);
 
-        // Build a supplier name cache
-        const names = {};
-        for (const p of data) {
-            if (p.supplier_id && !names[p.supplier_id]) {
-                const sup = await getSupplierById(p.supplier_id);
-                names[p.supplier_id] = sup ? sup.name : 'Unknown';
+            const allPeriod = await getPurchases(filter);
+            setPeriodTotalCost(allPeriod.reduce((s, p) => s + (p.total_cost || 0), 0));
+
+            // Build a supplier name cache
+            const names = {};
+            for (const p of result.data) {
+                if (p.supplier_id && !names[p.supplier_id]) {
+                    const sup = await getSupplierById(p.supplier_id);
+                    names[p.supplier_id] = sup ? sup.name : 'Unknown';
+                }
             }
+            setSupplierNames(prev => ({ ...prev, ...names }));
+        } catch (err) {
+            setError(true);
+            showToast('Failed to load purchases', 'error');
+        } finally {
+            setLoading(false);
         }
-        setSupplierNames(prev => ({ ...prev, ...names }));
     };
 
     const loadFormData = async () => {
@@ -60,15 +79,19 @@ export default function PurchasesPage() {
     };
 
     useEffect(() => {
-        loadPurchases();
         loadFormData();
     }, []);
 
     useEffect(() => {
-        loadPurchases();
+        setPage(1);
     }, [filter]);
 
+    useEffect(() => {
+        loadPurchases();
+    }, [filter, page]);
+
     const openNewPurchase = () => {
+        setErrors({});
         setSelectedSupplier('');
         setPurchaseItems([]);
         setPurchaseNotes('');
@@ -100,6 +123,23 @@ export default function PurchasesPage() {
         const updated = [...purchaseItems];
         updated[index] = { ...updated[index], [field]: value };
         setPurchaseItems(updated);
+
+        // Clear error for this field
+        if (errors.items?.[index]?.[field]) {
+            setErrors(prev => {
+                const nextItems = { ...prev.items };
+                if (nextItems[index]) {
+                    const nextItemErr = { ...nextItems[index] };
+                    delete nextItemErr[field];
+                    if (Object.keys(nextItemErr).length === 0) {
+                        delete nextItems[index];
+                    } else {
+                        nextItems[index] = nextItemErr;
+                    }
+                }
+                return { ...prev, items: nextItems };
+            });
+        }
     };
 
     const removeItem = (index) => {
@@ -107,28 +147,60 @@ export default function PurchasesPage() {
     };
 
     const totalCost = purchaseItems.reduce(
-        (sum, item) => sum + (item.quantity * item.purchase_price), 0
+        (sum, item) => sum + ((parseFloat(item.quantity) || 0) * (parseFloat(item.purchase_price) || 0)), 0
     );
 
     const handleSavePurchase = async () => {
+        const newErrors = {};
+
         if (!selectedSupplier) {
-            showToast('Please select a supplier', 'error');
-            return;
+            newErrors.supplier = 'Please select a supplier';
         }
         if (purchaseItems.length === 0) {
-            showToast('Add at least one product', 'error');
-            return;
+            newErrors.products = 'Add at least one product';
         }
-        // Validate quantities
-        for (const item of purchaseItems) {
-            if (!item.quantity || item.quantity <= 0) {
-                showToast(`Invalid quantity for ${item.product_name}`, 'error');
-                return;
+
+        const itemErrors = {};
+        let hasItemErrors = false;
+
+        purchaseItems.forEach((item, index) => {
+            const itemErr = {};
+            const qty = parseInt(item.quantity);
+            const price = parseFloat(item.purchase_price);
+
+            if (isNaN(qty) || qty <= 0) {
+                itemErr.quantity = 'Quantity must be greater than zero';
+                hasItemErrors = true;
             }
+            if (isNaN(price) || price < 0) {
+                itemErr.purchase_price = 'Price cannot be negative';
+                hasItemErrors = true;
+            }
+
+            if (Object.keys(itemErr).length > 0) {
+                itemErrors[index] = itemErr;
+            }
+        });
+
+        if (hasItemErrors) {
+            newErrors.items = itemErrors;
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
+            return;
         }
 
         try {
-            await createPurchase(parseInt(selectedSupplier), purchaseItems, purchaseNotes);
+            const cleanedItems = purchaseItems.map(item => ({
+                product_id: item.product_id,
+                product_name: item.product_name.trim(),
+                quantity: parseInt(item.quantity),
+                purchase_price: parseFloat(item.purchase_price)
+            }));
+
+            await createPurchase(parseInt(selectedSupplier), cleanedItems, purchaseNotes.trim());
             showToast('Purchase recorded & stock updated');
             setShowForm(false);
             loadPurchases();
@@ -202,7 +274,7 @@ export default function PurchasesPage() {
             </div>
 
             {/* Summary Card */}
-            {purchases.length > 0 && (
+            {totalCount > 0 && (
                 <div style={{
                     marginBottom: 16,
                     padding: '12px 16px',
@@ -214,16 +286,88 @@ export default function PurchasesPage() {
                     alignItems: 'center'
                 }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {purchases.length} Purchase{purchases.length > 1 ? 's' : ''}
+                        {totalCount} Purchase{totalCount !== 1 ? 's' : ''}
                     </div>
                     <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary-400)' }}>
-                        {formatCurrency(purchases.reduce((s, p) => s + (p.total_cost || 0), 0))}
+                        {formatCurrency(periodTotalCost)}
                     </div>
                 </div>
             )}
 
             {/* Purchases List */}
-            {purchases.length === 0 ? (
+            {loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="skeleton-shimmer" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '16px',
+                            borderRadius: 'var(--radius-md)',
+                            minHeight: '72px',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%' }}>
+                                <div className="skeleton-box" style={{ width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                    <div className="skeleton-box" style={{ width: '40%', height: '16px' }} />
+                                    <div className="skeleton-box" style={{ width: '60%', height: '12px' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, width: '20%' }}>
+                                <div className="skeleton-box" style={{ width: '60px', height: '16px' }} />
+                                <div className="skeleton-box" style={{ width: '40px', height: '12px' }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : error ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)',
+                    margin: '20px 0'
+                }}>
+                    <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(244, 63, 94, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--danger-500)',
+                        marginBottom: '16px'
+                    }}>
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        Connection Failed
+                    </h3>
+                    <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Failed to load purchases. Please check your connection and try again.
+                    </p>
+                    <button
+                        onClick={loadPurchases}
+                        className="btn btn-primary"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <RotateCcw size={14} /> Retry
+                    </button>
+                </div>
+            ) : purchases.length === 0 ? (
                 <div className="empty-state">
                     <Package size={52} />
                     <h3>No Purchases Yet</h3>
@@ -289,6 +433,42 @@ export default function PurchasesPage() {
                 ))
             )}
 
+            {totalCount > 25 && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 16,
+                    marginBottom: 20,
+                    padding: '12px 16px',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.82rem',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <button
+                        disabled={page === 1}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Previous
+                    </button>
+                    <span style={{ fontWeight: 500 }}>
+                        Showing {Math.min(totalCount, (page - 1) * 25 + 1)}-{Math.min(totalCount, page * 25)} of {totalCount} results
+                    </span>
+                    <button
+                        disabled={page * 25 >= totalCount}
+                        onClick={() => setPage(p => p + 1)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px' }}
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
+
             {/* New Purchase Modal */}
             {showForm && (
                 <div className="modal-overlay" onClick={() => setShowForm(false)}>
@@ -302,7 +482,10 @@ export default function PurchasesPage() {
                             <select
                                 className="form-input"
                                 value={selectedSupplier}
-                                onChange={(e) => setSelectedSupplier(e.target.value)}
+                                onChange={(e) => {
+                                    setSelectedSupplier(e.target.value);
+                                    if (errors.supplier) setErrors(prev => ({ ...prev, supplier: null }));
+                                }}
                                 id="purchase-supplier-select"
                             >
                                 <option value="">Select supplier...</option>
@@ -310,6 +493,7 @@ export default function PurchasesPage() {
                                     <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
                             </select>
+                            {errors.supplier && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.supplier}</p>}
                         </div>
 
                         {/* Add Products */}
@@ -349,10 +533,11 @@ export default function PurchasesPage() {
                                                         type="number"
                                                         className="form-input"
                                                         value={item.quantity}
-                                                        onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                                                        onChange={(e) => updateItem(index, 'quantity', e.target.value)}
                                                         style={{ padding: '6px 8px', fontSize: '0.85rem' }}
                                                         min="1"
                                                     />
+                                                    {errors.items?.[index]?.quantity && <p style={{ color: 'var(--danger-400)', fontSize: '0.70rem', marginTop: 2, fontWeight: 500 }}>{errors.items[index].quantity}</p>}
                                                 </div>
                                                 <div style={{ flex: 1 }}>
                                                     <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 2 }}>Price ({currency})</div>
@@ -360,11 +545,12 @@ export default function PurchasesPage() {
                                                         type="number"
                                                         className="form-input"
                                                         value={item.purchase_price}
-                                                        onChange={(e) => updateItem(index, 'purchase_price', parseFloat(e.target.value) || 0)}
+                                                        onChange={(e) => updateItem(index, 'purchase_price', e.target.value)}
                                                         style={{ padding: '6px 8px', fontSize: '0.85rem' }}
                                                         min="0"
                                                         step="0.01"
                                                     />
+                                                    {errors.items?.[index]?.purchase_price && <p style={{ color: 'var(--danger-400)', fontSize: '0.70rem', marginTop: 2, fontWeight: 500 }}>{errors.items[index].purchase_price}</p>}
                                                 </div>
                                             </div>
                                         </div>

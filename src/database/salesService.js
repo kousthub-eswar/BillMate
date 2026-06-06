@@ -28,39 +28,77 @@ export async function getSaleById(id) {
     return sale;
 }
 
-export async function getSales(filter = 'today') {
-    let query = supabase.from('sales').select('*').neq('payment_method', 'Settle').order('date', { ascending: false });
+export async function getSales(filter = 'today', page = null, pageSize = 25, searchQuery = '', paymentMethod = 'All') {
+    let query = supabase.from('sales').select('*, customers(name)', { count: 'exact' }).neq('payment_method', 'Settle').order('date', { ascending: false });
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-    switch (filter) {
-        case 'today':
-            query = query.gte('date', startOfToday);
-            break;
-        case 'week': {
-            const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
-            query = query.gte('date', weekAgo);
-            break;
-        }
-        case 'month': {
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-            query = query.gte('date', monthStart);
-            break;
-        }
-        case 'all':
-            break;
-        default:
-            if (filter.startDate && filter.endDate) {
-                query = query.gte('date', new Date(filter.startDate).toISOString());
-                const end = new Date(filter.endDate);
-                end.setHours(23, 59, 59, 999);
-                query = query.lte('date', end.toISOString());
+    if (typeof filter === 'string') {
+        switch (filter) {
+            case 'today':
+                query = query.gte('date', startOfToday);
+                break;
+            case 'week': {
+                const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+                query = query.gte('date', weekAgo);
+                break;
             }
+            case 'month': {
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+                query = query.gte('date', monthStart);
+                break;
+            }
+            case 'all':
+            default:
+                break;
+        }
+    } else if (filter && filter.startDate && filter.endDate) {
+        query = query.gte('date', new Date(filter.startDate).toISOString());
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        query = query.lte('date', end.toISOString());
     }
 
-    const { data } = await query;
-    return data || [];
+    if (paymentMethod && paymentMethod !== 'All') {
+        query = query.eq('payment_method', paymentMethod);
+    }
+
+    if (searchQuery.trim()) {
+        const qTrim = searchQuery.trim();
+        const { data: matchedCustomers } = await supabase.from('customers').select('id').ilike('name', `%${qTrim}%`);
+        const customerIds = matchedCustomers ? matchedCustomers.map(c => c.id) : [];
+        const isNum = !isNaN(qTrim);
+
+        if (isNum && customerIds.length > 0) {
+            query = query.or(`id.eq.${qTrim},customer_id.in.(${customerIds.join(',')})`);
+        } else if (isNum) {
+            query = query.eq('id', qTrim);
+        } else if (customerIds.length > 0) {
+            query = query.in('customer_id', customerIds);
+        } else {
+            query = query.eq('id', -1);
+        }
+    }
+
+    if (page !== null) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    const formattedSales = (data || []).map(sale => ({
+        ...sale,
+        customer_name: sale.customers ? sale.customers.name : null
+    }));
+
+    if (page !== null) {
+        return { data: formattedSales, count: count || 0 };
+    }
+    return formattedSales;
 }
 
 export async function refundSale(saleId) {
@@ -87,6 +125,20 @@ export async function getTodayStats() {
         totalRevenue: sales.reduce((s, r) => s + Number(r.total), 0),
         totalProfit: sales.reduce((s, r) => s + Number(r.profit), 0),
         transactionCount: sales.length
+    };
+}
+
+export async function getDashboardStats(startDate, endDate) {
+    const { data, error } = await supabase.rpc('get_dashboard_stats', {
+        p_start_date: startDate,
+        p_end_date: endDate
+    });
+    if (error) throw error;
+    return {
+        totalRevenue: Number(data.total_revenue) || 0,
+        totalProfit: Number(data.total_profit) || 0,
+        transactionCount: Number(data.transaction_count) || 0,
+        topProducts: data.top_5_products || []
     };
 }
 

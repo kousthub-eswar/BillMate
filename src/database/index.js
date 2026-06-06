@@ -9,12 +9,12 @@ export {
 
 export {
     createSale, getSaleById, getSales, refundSale, undoLastSale,
-    getTodayStats, getTopSellingProducts
+    getTodayStats, getTopSellingProducts, getDashboardStats
 } from './salesService';
 
 export {
     addExpense, getTodayExpenses, getExpensesByDate,
-    deleteExpense, getTodayExpenseTotal
+    deleteExpense, getTodayExpenseTotal, getExpenseTotal
 } from './expenseService';
 
 export {

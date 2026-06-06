@@ -2,21 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Store, DollarSign, AlertTriangle, MessageSquare,
     Download, Upload, LogOut, ChevronRight, FileText, Smartphone,
-    Sun, Moon, ShieldAlert, ShieldCheck, RotateCcw
+    Sun, Moon, ShieldAlert, ShieldCheck, RotateCcw, Phone, MapPin
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { getAllSettings, setSetting, DEFAULT_SETTINGS } from '../database';
-import { exportAllData, importAllData, logout } from '../backend';
+import { exportAllData, importAllData } from '../backend';
 import { useToast } from '../components/Toast';
 
 export default function SettingsPage({ onLogout }) {
     const [settings, setSettings] = useState({});
     const [showEditModal, setShowEditModal] = useState(null);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
+    const [showExportConfirm, setShowExportConfirm] = useState(false);
     const [editValue, setEditValue] = useState('');
     const fileInputRef = useRef(null);
     const showToast = useToast();
+    const [errors, setErrors] = useState({});
     const [installPrompt, setInstallPrompt] = useState(null);
     const [isInstalled, setIsInstalled] = useState(false);
     const [theme, setTheme] = useState(() => {
@@ -58,20 +60,48 @@ export default function SettingsPage({ onLogout }) {
     }, []);
 
     const openEdit = (key, value) => {
+        setErrors({});
         setShowEditModal(key);
         setEditValue(value?.toString() || '');
     };
 
     const handleSave = async () => {
-        if (showEditModal) {
-            await setSetting(showEditModal, editValue);
+        if (!showEditModal) return;
+        const newErrors = {};
+        const trimmedValue = editValue.trim();
+
+        if (showEditModal === 'shop_name' && !trimmedValue) {
+            newErrors.value = 'Shop name cannot be empty';
+        }
+        if (showEditModal === 'currency' && !trimmedValue) {
+            newErrors.value = 'Currency symbol cannot be empty';
+        }
+        if (showEditModal === 'low_stock_threshold') {
+            const threshold = parseInt(trimmedValue);
+            if (isNaN(threshold) || threshold < 0) {
+                newErrors.value = 'Threshold must be a non-negative integer';
+            }
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            showToast('Please correct the validation errors', 'error');
+            return;
+        }
+
+        try {
+            await setSetting(showEditModal, trimmedValue);
             showToast('Setting updated');
             setShowEditModal(null);
+            setErrors({});
             loadSettings();
+        } catch (err) {
+            showToast('Failed to save setting', 'error');
         }
     };
 
     const handleExport = async () => {
+        setShowExportConfirm(false);
         try {
             await exportAllData();
             await setSetting('last_backup', new Date().toISOString());
@@ -105,9 +135,8 @@ export default function SettingsPage({ onLogout }) {
         e.target.value = '';
     };
 
-    const handleLogout = () => {
-        logout();
-        onLogout();
+    const handleLogout = async () => {
+        await onLogout();
     };
 
     const handleResetSettings = async () => {
@@ -122,6 +151,8 @@ export default function SettingsPage({ onLogout }) {
     const getSettingLabel = (key) => {
         const labels = {
             shop_name: 'Shop Name',
+            shop_phone: 'Shop Phone Number',
+            shop_address: 'Shop Address',
             currency: 'Currency Symbol',
             low_stock_threshold: 'Low Stock Threshold',
             upi_id: 'UPI Address / ID',
@@ -133,6 +164,8 @@ export default function SettingsPage({ onLogout }) {
     const getSettingDescription = (key) => {
         const descs = {
             shop_name: 'Displayed on receipts and dashboard',
+            shop_phone: 'Displayed on printed receipts',
+            shop_address: 'Displayed on printed receipts',
             currency: 'Currency symbol used throughout the app',
             low_stock_threshold: 'Alert when stock falls below this number',
             upi_id: 'Used to generate custom scan-to-pay QR codes during UPI checkout (e.g. shop@upi)',
@@ -144,6 +177,8 @@ export default function SettingsPage({ onLogout }) {
     const getSettingIcon = (key) => {
         const icons = {
             shop_name: Store,
+            shop_phone: Phone,
+            shop_address: MapPin,
             currency: DollarSign,
             low_stock_threshold: AlertTriangle,
             upi_id: Smartphone,
@@ -243,7 +278,7 @@ export default function SettingsPage({ onLogout }) {
             <div className="settings-group">
                 <div className="settings-group-title">Shop Settings</div>
 
-                {['shop_name', 'currency', 'low_stock_threshold', 'upi_id'].map(key => (
+                {['shop_name', 'shop_phone', 'shop_address', 'currency', 'low_stock_threshold', 'upi_id'].map(key => (
                     <div key={key} className="settings-item" onClick={() => openEdit(key, settings[key])}>
                         <div className="settings-item-icon">
                             {getSettingIcon(key)}
@@ -289,7 +324,7 @@ export default function SettingsPage({ onLogout }) {
                     </div>
                 )}
 
-                <div className="settings-item" onClick={handleExport}>
+                <div className="settings-item" onClick={() => setShowExportConfirm(true)}>
                     <div className="settings-item-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--accent-400)' }}>
                         <Download size={18} />
                     </div>
@@ -405,25 +440,32 @@ export default function SettingsPage({ onLogout }) {
                         <div className="modal-title">{getSettingLabel(showEditModal)}</div>
 
                         <div className="form-group">
-                            <label className="form-label">{getSettingDescription(showEditModal)}</label>
-                            {showEditModal === 'receipt_template' ? (
-                                <textarea
-                                    className="form-input"
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    rows={8}
-                                    style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
-                                    id="receipt-template-input"
-                                />
-                            ) : (
-                                <input
-                                    className="form-input"
-                                    type={showEditModal === 'low_stock_threshold' ? 'number' : 'text'}
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    id="setting-value-input"
-                                />
-                            )}
+                             <label className="form-label">{getSettingDescription(showEditModal)}</label>
+                             {(showEditModal === 'receipt_template' || showEditModal === 'shop_address') ? (
+                                  <textarea
+                                      className="form-input"
+                                      value={editValue}
+                                      onChange={(e) => {
+                                          setEditValue(e.target.value);
+                                          if (errors.value) setErrors({});
+                                      }}
+                                      rows={showEditModal === 'shop_address' ? 3 : 8}
+                                      style={showEditModal === 'receipt_template' ? { fontFamily: 'monospace', fontSize: '0.8rem' } : {}}
+                                      id="textarea-setting-input"
+                                  />
+                             ) : (
+                                  <input
+                                      className="form-input"
+                                      type={showEditModal === 'low_stock_threshold' ? 'number' : 'text'}
+                                      value={editValue}
+                                      onChange={(e) => {
+                                          setEditValue(e.target.value);
+                                          if (errors.value) setErrors({});
+                                      }}
+                                      id="setting-value-input"
+                                  />
+                             )}
+                             {errors.value && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{errors.value}</p>}
                         </div>
 
                         {showEditModal === 'receipt_template' && (
@@ -442,6 +484,17 @@ export default function SettingsPage({ onLogout }) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showExportConfirm && (
+                <ConfirmDialog
+                    title="Export Backup?"
+                    message="This will download all your store data"
+                    confirmText="Export"
+                    variant="success"
+                    onConfirm={handleExport}
+                    onCancel={() => setShowExportConfirm(false)}
+                />
             )}
 
             {showResetConfirm && (

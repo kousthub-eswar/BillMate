@@ -19,8 +19,8 @@ export async function createPurchase(supplierId, items, notes = '') {
     return { purchaseId: data.purchaseId, totalCost: data.totalCost };
 }
 
-export async function getPurchases(filter = 'all') {
-    let query = supabase.from('purchases').select('*').order('date', { ascending: false });
+export async function getPurchases(filter = 'all', page = null, pageSize = 25) {
+    let query = supabase.from('purchases').select('*', { count: 'exact' }).order('date', { ascending: false });
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -44,7 +44,18 @@ export async function getPurchases(filter = 'all') {
             break;
     }
 
-    const { data } = await query;
+    if (page !== null) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    if (page !== null) {
+        return { data: data || [], count: count || 0 };
+    }
     return data || [];
 }
 

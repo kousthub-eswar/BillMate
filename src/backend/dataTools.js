@@ -3,9 +3,14 @@ import { supabase, getCurrentUserId } from '../database/supabase';
 export async function exportAllData() {
     const tables = ['products', 'sales', 'sale_items', 'customers', 'suppliers', 'purchases', 'purchase_items', 'expenses', 'settings'];
     const data = { version: 4, exportDate: new Date().toISOString() };
+    const userId = await getCurrentUserId();
+
+    if (!userId) {
+        throw new Error('User not authenticated');
+    }
 
     for (const table of tables) {
-        const { data: rows } = await supabase.from(table).select('*');
+        const { data: rows } = await supabase.from(table).select('*').eq('user_id', userId);
         data[table] = rows || [];
     }
 

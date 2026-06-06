@@ -6,7 +6,8 @@ import {
     refundSale,
     undoLastSale,
     getTodayStats,
-    getTopSellingProducts
+    getTopSellingProducts,
+    getDashboardStats
 } from '../salesService';
 import { supabase } from '../supabase';
 import { createQueryMock } from '../../test/supabaseMock';
@@ -79,10 +80,13 @@ describe('salesService.js', () => {
             const resDefault = await getSales('today');
             expect(supabase.from).toHaveBeenCalledWith('sales');
             expect(supabase.from().neq).toHaveBeenCalledWith('payment_method', 'Settle');
-            expect(resDefault).toEqual(list);
+            expect(resDefault).toEqual([{ id: '1', customer_name: null }]);
 
             await getSales('week');
             expect(supabase.from().gte).toHaveBeenCalled();
+
+            const paginatedRes = await getSales('today', 2, 25);
+            expect(supabase.from().range).toHaveBeenCalledWith(25, 49);
         });
     });
 
@@ -151,6 +155,33 @@ describe('salesService.js', () => {
                 { name: 'Product B', quantity: 5 },
                 { name: 'Product A', quantity: 2 }
             ]);
+        });
+    });
+
+    describe('getDashboardStats', () => {
+        it('should call get_dashboard_stats RPC and format outputs', async () => {
+            const mockData = {
+                total_revenue: 1500,
+                total_profit: 600,
+                transaction_count: 5,
+                top_5_products: [
+                    { name: 'Product A', quantity: 10 }
+                ]
+            };
+            supabase.rpc.mockResolvedValue({ data: mockData, error: null });
+
+            const result = await getDashboardStats('2026-05-01T00:00:00Z', '2026-05-31T23:59:59Z');
+
+            expect(supabase.rpc).toHaveBeenCalledWith('get_dashboard_stats', {
+                p_start_date: '2026-05-01T00:00:00Z',
+                p_end_date: '2026-05-31T23:59:59Z'
+            });
+            expect(result).toEqual({
+                totalRevenue: 1500,
+                totalProfit: 600,
+                transactionCount: 5,
+                topProducts: [{ name: 'Product A', quantity: 10 }]
+            });
         });
     });
 });

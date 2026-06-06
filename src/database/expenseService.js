@@ -13,10 +13,23 @@ export async function addExpense(expense) {
     return data.id;
 }
 
-export async function getTodayExpenses() {
+export async function getTodayExpenses(page = null, pageSize = 25) {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const { data } = await supabase.from('expenses').select('*').gte('date', startOfToday).order('date', { ascending: false });
+    let query = supabase.from('expenses').select('*', { count: 'exact' }).gte('date', startOfToday).order('date', { ascending: false });
+
+    if (page !== null) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    if (page !== null) {
+        return { data: data || [], count: count || 0 };
+    }
     return data || [];
 }
 
@@ -35,5 +48,10 @@ export async function deleteExpense(id) {
 
 export async function getTodayExpenseTotal() {
     const expenses = await getTodayExpenses();
+    return expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+}
+
+export async function getExpenseTotal(startDate, endDate) {
+    const expenses = await getExpensesByDate(startDate, endDate);
     return expenses.reduce((sum, e) => sum + Number(e.amount), 0);
 }

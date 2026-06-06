@@ -2,6 +2,8 @@ import { supabase, getCurrentUserId } from './supabase';
 
 const DEFAULT_SETTINGS = {
     shop_name: 'My Shop',
+    shop_phone: '',
+    shop_address: '',
     currency: '₹',
     low_stock_threshold: 5,
     upi_id: 'merchant@upi',
