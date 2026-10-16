@@ -16,6 +16,7 @@ export default function UpiPaymentQr({
     shopName = 'BillMate',
     amount = 0,
     note = 'Sale Payment',
+    currency = '₹',
     onCopySuccess
 }) {
     const [qrDataUrl, setQrDataUrl] = useState('');
@@ -98,7 +99,7 @@ export default function UpiPaymentQr({
                     fontWeight: 800,
                     color: 'var(--accent-400)'
                 }}>
-                    ₹{Number(amount).toFixed(2)}
+                    {currency}{Number(amount).toFixed(2)}
                 </span>
             </div>
 

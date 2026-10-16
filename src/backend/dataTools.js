@@ -35,34 +35,77 @@ export async function importAllData(jsonString) {
         // Clear existing data in order (children first, then parents)
         const clearOrder = ['sale_items', 'purchase_items', 'sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'settings'];
         for (const table of clearOrder) {
-            await supabase.from(table).delete().neq('id', -1).catch(() => {
-                // settings table uses composite key
-                return supabase.from(table).delete().neq('key', '');
-            });
+            if (table === 'settings') {
+                await supabase.from(table).delete().neq('key', '');
+            } else {
+                const { error } = await supabase.from(table).delete().neq('id', -1);
+                if (error) throw new Error(`Failed to clear ${table}: ${error.message}`);
+            }
         }
 
-        // Insert data - stamp user_id on every row
-        const insertMap = {
-            products: data.products,
-            customers: data.customers,
-            suppliers: data.suppliers,
-            sales: data.sales,
-            sale_items: data.sale_items || data.saleItems,
-            purchases: data.purchases,
-            purchase_items: data.purchase_items || data.purchaseItems,
-            expenses: data.expenses,
-            settings: data.settings
-        };
+        // Helper: insert rows, build old-ID → new-ID map
+        const idMap = {};
+        async function insertWithMap(table, rows) {
+            if (!rows?.length) return;
+            idMap[table] = {};
 
-        for (const [table, rows] of Object.entries(insertMap)) {
-            if (rows?.length) {
-                const cleaned = rows.map(row => {
-                    const { id: _id, ...rest } = row;
-                    const stamped = table === 'settings' ? { ...row, user_id: userId } : { ...rest, user_id: userId };
-                    return stamped;
-                });
-                await supabase.from(table).insert(cleaned);
+            for (const row of rows) {
+                const oldId = row.id;
+                const { id: _id, ...rest } = row;
+                const stamped = { ...rest, user_id: userId };
+                const { data: inserted, error } = await supabase.from(table).insert(stamped).select('id').single();
+                if (error) throw new Error(`Failed to insert into ${table}: ${error.message}`);
+                if (oldId != null && inserted) {
+                    idMap[table][oldId] = inserted.id;
+                }
             }
+        }
+
+        // 1. Insert parent tables first (products, customers, suppliers)
+        await insertWithMap('products', data.products);
+        await insertWithMap('customers', data.customers);
+        await insertWithMap('suppliers', data.suppliers);
+
+        // 2. Insert sales — remap customer_id FK
+        const remappedSales = (data.sales || []).map(row => ({
+            ...row,
+            customer_id: row.customer_id ? (idMap.customers?.[row.customer_id] ?? null) : null
+        }));
+        await insertWithMap('sales', remappedSales);
+
+        // 3. Insert sale_items — remap sale_id and product_id FKs
+        const saleItems = data.sale_items || data.saleItems || [];
+        const remappedSaleItems = saleItems.map(row => ({
+            ...row,
+            sale_id: idMap.sales?.[row.sale_id] ?? row.sale_id,
+            product_id: row.product_id ? (idMap.products?.[row.product_id] ?? null) : null
+        }));
+        await insertWithMap('sale_items', remappedSaleItems);
+
+        // 4. Insert purchases — remap supplier_id FK
+        const remappedPurchases = (data.purchases || []).map(row => ({
+            ...row,
+            supplier_id: row.supplier_id ? (idMap.suppliers?.[row.supplier_id] ?? null) : null
+        }));
+        await insertWithMap('purchases', remappedPurchases);
+
+        // 5. Insert purchase_items — remap purchase_id and product_id FKs
+        const purchaseItems = data.purchase_items || data.purchaseItems || [];
+        const remappedPurchaseItems = purchaseItems.map(row => ({
+            ...row,
+            purchase_id: idMap.purchases?.[row.purchase_id] ?? row.purchase_id,
+            product_id: row.product_id ? (idMap.products?.[row.product_id] ?? null) : null
+        }));
+        await insertWithMap('purchase_items', remappedPurchaseItems);
+
+        // 6. Insert expenses (no FK remapping needed)
+        await insertWithMap('expenses', data.expenses);
+
+        // 7. Insert settings (keep composite key, no id column)
+        if (data.settings?.length) {
+            const settingsRows = data.settings.map(row => ({ ...row, user_id: userId }));
+            const { error } = await supabase.from('settings').insert(settingsRows);
+            if (error) throw new Error(`Failed to insert settings: ${error.message}`);
         }
 
         return { success: true, message: 'Data imported successfully' };

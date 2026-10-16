@@ -18,7 +18,8 @@ export async function getAllCustomers() {
 }
 
 export async function getCustomerById(id) {
-    const { data } = await supabase.from('customers').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('customers').select('*').eq('id', id).single();
+    if (error && error.code !== 'PGRST116') throw error;
     return data;
 }
 
@@ -27,10 +28,11 @@ export async function updateCustomerBalance(id, amount) {
     const customer = await getCustomerById(id);
     if (!customer) throw new Error('Customer not found');
     const newBalance = Math.max(0, (Number(customer.balance) || 0) - amount);
-    await supabase.from('customers').update({ balance: newBalance, updated_at: new Date().toISOString() }).eq('id', id);
+    const { error: updateErr } = await supabase.from('customers').update({ balance: newBalance, updated_at: new Date().toISOString() }).eq('id', id);
+    if (updateErr) throw updateErr;
 
     // Also record a settlement in sales for history
-    await supabase.from('sales').insert({
+    const { error: insertErr } = await supabase.from('sales').insert({
         user_id: userId,
         date: new Date().toISOString(),
         total: 0,
@@ -44,6 +46,7 @@ export async function updateCustomerBalance(id, amount) {
         item_count: 0,
         settle_amount: amount
     });
+    if (insertErr) throw insertErr;
 }
 
 export async function getCustomerHistory(customerId, page = null, pageSize = 25) {

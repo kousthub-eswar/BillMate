@@ -96,5 +96,40 @@ describe('dataTools.js', () => {
             expect(result.success).toBe(false);
             expect(result.message).toContain('Unexpected token');
         });
+
+        it('should remap foreign keys from old parent IDs to newly generated parent IDs', async () => {
+            const backupWithRelationships = JSON.stringify({
+                version: 4,
+                customers: [{ id: 101, name: 'Alice' }],
+                products: [{ id: 201, name: 'Bread' }],
+                sales: [{ id: 301, customer_id: 101, total: 50 }],
+                sale_items: [{ id: 401, sale_id: 301, product_id: 201, quantity: 1 }]
+            });
+
+            const insertedRows = {};
+            supabase.from.mockImplementation((table) => {
+                const queryMock = createQueryMock();
+                queryMock.insert.mockImplementation((payload) => {
+                    if (!insertedRows[table]) insertedRows[table] = [];
+                    insertedRows[table].push(payload);
+                    return queryMock;
+                });
+                queryMock.single.mockImplementation(() => {
+                    if (table === 'customers') return Promise.resolve({ data: { id: 991 }, error: null });
+                    if (table === 'products') return Promise.resolve({ data: { id: 992 }, error: null });
+                    if (table === 'sales') return Promise.resolve({ data: { id: 993 }, error: null });
+                    if (table === 'sale_items') return Promise.resolve({ data: { id: 994 }, error: null });
+                    return Promise.resolve({ data: { id: 1 }, error: null });
+                });
+                return queryMock;
+            });
+
+            const result = await importAllData(backupWithRelationships);
+
+            expect(result.success).toBe(true);
+            expect(insertedRows.sales[0].customer_id).toBe(991);
+            expect(insertedRows.sale_items[0].sale_id).toBe(993);
+            expect(insertedRows.sale_items[0].product_id).toBe(992);
+        });
     });
 });

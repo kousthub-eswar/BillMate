@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
     ShoppingBag, Search, Filter, AlertTriangle
@@ -42,7 +42,7 @@ export default function SalesPage() {
         setCurrency(c);
     };
 
-    const loadSales = async () => {
+    const loadSales = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -59,12 +59,12 @@ export default function SalesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filter, dateRange, page, searchQuery, paymentFilter, showToast]);
 
     useEffect(() => {
         loadSales();
         loadCurrency();
-    }, [filter, dateRange, page, searchQuery, paymentFilter]);
+    }, [loadSales]);
 
     const toggleExpand = async (saleId) => {
         if (expandedSale === saleId) {

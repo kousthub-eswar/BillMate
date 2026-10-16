@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     getDashboardStats, getLowStockProducts,
     getSetting, getExpenseTotal, undoLastSale,
@@ -82,49 +82,6 @@ export default function DashboardPage({ onNavigate }) {
                 break;
         }
         return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
-    };
-
-    const loadDashboard = async () => {
-        setLoading(true);
-        try {
-            const { startDate, endDate } = getDateRange(filter, dateRange);
-
-            const [statsData, curr, thresh, expTotal] = await Promise.all([
-                getDashboardStats(startDate, endDate),
-                getSetting('currency'),
-                getSetting('low_stock_threshold'),
-                getExpenseTotal(startDate, endDate)
-            ]);
-
-            setStats({
-                totalRevenue: statsData.totalRevenue,
-                totalProfit: statsData.totalProfit,
-                transactionCount: statsData.transactionCount
-            });
-            setTopProducts(statsData.topProducts);
-            setCurrency(curr);
-            setExpenseTotal(expTotal);
-
-            const lowStockData = await getLowStockProducts(parseInt(thresh));
-            setLowStock(lowStockData);
-
-            // Load advanced analytics
-            await loadWeeklyRevenue();
-            await loadSlowMoving(parseInt(thresh));
-            await loadProfitReport();
-
-            // Calculate automated replenishment suggestions
-            const suggestions = await loadReplenishment(lowStockData);
-            setForecasting(prev => ({
-                ...prev,
-                replenishment: suggestions
-            }));
-        } catch (err) {
-            console.error('Failed to load dashboard:', err);
-            showToast('Failed to load dashboard data', 'error');
-        } finally {
-            setLoading(false);
-        }
     };
 
     const loadReplenishment = async (lowStockData) => {
@@ -271,12 +228,55 @@ export default function DashboardPage({ onNavigate }) {
         setProfitReport(profitable);
     };
 
+    const loadDashboard = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { startDate, endDate } = getDateRange(filter, dateRange);
+
+            const [statsData, curr, thresh, expTotal] = await Promise.all([
+                getDashboardStats(startDate, endDate),
+                getSetting('currency'),
+                getSetting('low_stock_threshold'),
+                getExpenseTotal(startDate, endDate)
+            ]);
+
+            setStats({
+                totalRevenue: statsData.totalRevenue,
+                totalProfit: statsData.totalProfit,
+                transactionCount: statsData.transactionCount
+            });
+            setTopProducts(statsData.topProducts);
+            setCurrency(curr);
+            setExpenseTotal(expTotal);
+
+            const lowStockData = await getLowStockProducts(parseInt(thresh));
+            setLowStock(lowStockData);
+
+            // Load advanced analytics
+            await loadWeeklyRevenue();
+            await loadSlowMoving(parseInt(thresh));
+            await loadProfitReport();
+
+            // Calculate automated replenishment suggestions
+            const suggestions = await loadReplenishment(lowStockData);
+            setForecasting(prev => ({
+                ...prev,
+                replenishment: suggestions
+            }));
+        } catch (err) {
+            console.error('Failed to load dashboard:', err);
+            showToast('Failed to load dashboard data', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [filter, dateRange, showToast]);
+
     useEffect(() => {
         if (filter === 'custom' && (!dateRange.startDate || !dateRange.endDate)) {
             return;
         }
         loadDashboard();
-    }, [filter, dateRange]);
+    }, [filter, dateRange, loadDashboard]);
 
     const handleUndoLastSale = async () => {
         try {

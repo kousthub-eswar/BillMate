@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Package, Plus, Search, Truck, X, ShoppingCart,
     Calendar, Trash2, ChevronDown, ChevronUp, RotateCcw, AlertTriangle
@@ -39,7 +39,7 @@ export default function PurchasesPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
 
-    const loadPurchases = async () => {
+    const loadPurchases = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -65,7 +65,7 @@ export default function PurchasesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filter, page, showToast]);
 
     const loadFormData = async () => {
         const [sups, prods, curr] = await Promise.all([
@@ -88,7 +88,7 @@ export default function PurchasesPage() {
 
     useEffect(() => {
         loadPurchases();
-    }, [filter, page]);
+    }, [loadPurchases]);
 
     const openNewPurchase = () => {
         setErrors({});

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Truck, UserPlus, Search, Phone, MapPin,
     Edit2, Trash2, X, ChevronRight, Package,
@@ -42,7 +42,7 @@ export default function SuppliersPage() {
         setCurrency(c);
     };
 
-    const loadSuppliers = async () => {
+    const loadSuppliers = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -61,36 +61,37 @@ export default function SuppliersPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
+
+    const handleSearch = useCallback(async (val) => {
+        setLoading(true);
+        setError(false);
+        try {
+            const results = await searchSuppliers(val);
+            const withStats = await Promise.all(results.map(async (s) => {
+                const stats = await getSupplierStats(s.id);
+                return { ...s, ...stats };
+            }));
+            setSuppliers(withStats);
+        } catch (_err) {
+            setError(true);
+            showToast('Failed to search suppliers', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [showToast]);
 
     useEffect(() => {
-        loadSuppliers();
         loadCurrency();
     }, []);
 
     useEffect(() => {
         if (query.trim()) {
-            (async () => {
-                setLoading(true);
-                setError(false);
-                try {
-                    const results = await searchSuppliers(query);
-                    const withStats = await Promise.all(results.map(async (s) => {
-                        const stats = await getSupplierStats(s.id);
-                        return { ...s, ...stats };
-                    }));
-                    setSuppliers(withStats);
-                } catch (err) {
-                    setError(true);
-                    showToast('Failed to search suppliers', 'error');
-                } finally {
-                    setLoading(false);
-                }
-            })();
+            handleSearch(query);
         } else {
             loadSuppliers();
         }
-    }, [query]);
+    }, [query, handleSearch, loadSuppliers]);
 
     const openAdd = () => {
         setErrors({});

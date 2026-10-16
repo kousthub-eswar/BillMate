@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, ChevronRight } from 'lucide-react';
 import { generateAlerts } from '../backend/alerts';
 
@@ -40,18 +40,18 @@ export default function AlertsPanel({ isOpen, onClose, onNavigate }) {
         }
     });
 
-    const loadAlerts = async () => {
+    const loadAlerts = useCallback(async () => {
         setLoading(true);
         const data = await generateAlerts();
         setAlerts(data.filter(a => !dismissed.includes(a.id)));
         setLoading(false);
-    };
+    }, [dismissed]);
 
     useEffect(() => {
         if (isOpen) {
             loadAlerts();
         }
-    }, [isOpen]);
+    }, [isOpen, loadAlerts]);
 
     const dismissAlert = (alertId) => {
         const updated = [...dismissed, alertId];

@@ -30,7 +30,10 @@ export default defineConfig([
         destructuredArrayIgnorePattern: '^_',
       }],
       'react-hooks/set-state-in-effect': 'off',
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react-refresh/only-export-components': ['warn', {
+        allowConstantExport: true,
+        allowExportNames: ['useToast', 'useAlertCount', 'generateUpiUri']
+      }],
     },
   },
 ])

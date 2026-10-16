@@ -28,7 +28,8 @@ export async function getAllProducts(page = null, pageSize = 25, search = '', ca
 }
 
 export async function getProductById(id) {
-    const { data } = await supabase.from('products').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
+    if (error && error.code !== 'PGRST116') throw error;
     return data;
 }
 
@@ -85,7 +86,8 @@ export async function adjustStock(id, adjustment) {
     const product = await getProductById(id);
     if (!product) throw new Error('Product not found');
     const newQty = Math.max(0, product.stock_quantity + adjustment);
-    await supabase.from('products').update({ stock_quantity: newQty, updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase.from('products').update({ stock_quantity: newQty, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
 }
 
 export async function getCategories() {

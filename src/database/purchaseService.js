@@ -60,9 +60,11 @@ export async function getPurchases(filter = 'all', page = null, pageSize = 25) {
 }
 
 export async function getPurchaseById(id) {
-    const { data: purchase } = await supabase.from('purchases').select('*').eq('id', id).single();
+    const { data: purchase, error } = await supabase.from('purchases').select('*').eq('id', id).single();
+    if (error && error.code !== 'PGRST116') throw error;
     if (purchase) {
-        const { data: items } = await supabase.from('purchase_items').select('*').eq('purchase_id', id);
+        const { data: items, error: itemsError } = await supabase.from('purchase_items').select('*').eq('purchase_id', id);
+        if (itemsError) throw itemsError;
         purchase.items = items || [];
     }
     return purchase;

@@ -20,9 +20,11 @@ export async function createSale(cart, paymentMethod, customerId = null, discoun
 }
 
 export async function getSaleById(id) {
-    const { data: sale } = await supabase.from('sales').select('*').eq('id', id).single();
+    const { data: sale, error } = await supabase.from('sales').select('*').eq('id', id).single();
+    if (error && error.code !== 'PGRST116') throw error;
     if (sale) {
-        const { data: items } = await supabase.from('sale_items').select('*').eq('sale_id', id);
+        const { data: items, error: itemsError } = await supabase.from('sale_items').select('*').eq('sale_id', id);
+        if (itemsError) throw itemsError;
         sale.items = items || [];
     }
     return sale;

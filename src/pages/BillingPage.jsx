@@ -17,67 +17,6 @@ import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
 import UpiPaymentQr from '../components/UpiPaymentQr';
 
-function _generateEscPosStream(sale, items, settings) {
-    const stream = [];
-    const addCmd = (cmd, desc, hex) => stream.push({ cmd, desc, hex });
-
-    addCmd('ESC @', 'Initialize printer', '1B 40');
-    addCmd('ESC a 01', 'Align Center', '1B 61 01');
-    addCmd('GS ! 11', 'Double Font Size (Header)', '1D 21 11');
-    addCmd('TEXT', `${settings.shop_name || 'BillMate'}`, Array.from(new TextEncoder().encode(settings.shop_name || 'BillMate')).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-    addCmd('LF', 'Line feed', '0A');
-    addCmd('GS ! 00', 'Reset Font Size', '1D 21 00');
-    addCmd('LF', 'Line feed', '0A');
-    addCmd('ESC a 00', 'Align Left', '1B 61 00');
-    addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
-    addCmd('LF', 'Line feed', '0A');
-
-    items.forEach(item => {
-        const text = `${item.product_name || item.name} x${item.quantity} = ${settings.currency || '₹'}${Number(item.subtotal || item.selling_price * item.quantity).toFixed(2)}`;
-        addCmd('TEXT', text, Array.from(new TextEncoder().encode(text)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-        addCmd('LF', 'Line feed', '0A');
-    });
-
-    addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
-    addCmd('LF', 'Line feed', '0A');
-
-    if (sale.discount_amount > 0) {
-        const subtext = `Subtotal: ${settings.currency || '₹'}${Number(sale.subtotal || (sale.total + sale.discount_amount)).toFixed(2)}`;
-        addCmd('TEXT', subtext, Array.from(new TextEncoder().encode(subtext)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-        addCmd('LF', 'Line feed', '0A');
-        
-        const discText = `Discount: -${settings.currency || '₹'}${Number(sale.discount_amount).toFixed(2)}`;
-        addCmd('TEXT', discText, Array.from(new TextEncoder().encode(discText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-        addCmd('LF', 'Line feed', '0A');
-        addCmd('TEXT', '--------------------------------', '2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D 2D');
-        addCmd('LF', 'Line feed', '0A');
-    }
-
-    addCmd('GS ! 01', 'Double Width Font (Total)', '1D 21 01');
-    const totalText = `TOTAL: ${settings.currency || '₹'}${Number(sale.total).toFixed(2)}`;
-    addCmd('TEXT', totalText, Array.from(new TextEncoder().encode(totalText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-    addCmd('LF', 'Line feed', '0A');
-    addCmd('GS ! 00', 'Reset Font Size', '1D 21 00');
-    addCmd('LF', 'Line feed', '0A');
-
-    const paymentText = `Payment: ${sale.payment_method}`;
-    addCmd('TEXT', paymentText, Array.from(new TextEncoder().encode(paymentText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-    addCmd('LF', 'Line feed', '0A');
-
-    const dateText = `Date: ${new Date(sale.date).toLocaleString()}`;
-    addCmd('TEXT', dateText, Array.from(new TextEncoder().encode(dateText)).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' '));
-    addCmd('LF', 'Line feed', '0A');
-
-    addCmd('LF', 'Line feed', '0A');
-    addCmd('ESC a 01', 'Align Center', '1B 61 01');
-    addCmd('TEXT', 'Thank you! Please visit again.', '54 68 61 6E 6B 20 79 6F 75 21 20 50 6C 65 61 73 65 20 76 69 73 69 74 20 61 67 61 69 6E 2E');
-    addCmd('LF', 'Line feed', '0A');
-
-    addCmd('GS V 41 03', 'Cut paper (Full Cut)', '1D 56 41 03');
-
-    return stream;
-}
-
 export default function BillingPage() {
     const [query, setQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
@@ -189,14 +128,26 @@ export default function BillingPage() {
         setCategories(cats);
     };
 
-    const handleSearch = useCallback(async (value) => {
+    const searchTimeoutRef = useRef(null);
+
+    const handleSearch = useCallback((value) => {
         setQuery(value);
-        if (value.trim().length > 0) {
-            const results = await searchProducts(value);
-            setSearchResults(results);
-        } else {
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+        const trimmed = value.trim();
+        if (!trimmed) {
             setSearchResults([]);
+            return;
         }
+
+        searchTimeoutRef.current = setTimeout(async () => {
+            try {
+                const results = await searchProducts(trimmed);
+                setSearchResults(results);
+            } catch (err) {
+                console.error('Failed to search products:', err);
+            }
+        }, 300);
     }, []);
 
     const addToCart = (product) => {
@@ -224,6 +175,7 @@ export default function BillingPage() {
         if (query) {
             setQuery('');
             setSearchResults([]);
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         }
         showToast(`${product.name} added`);
 
@@ -312,15 +264,23 @@ export default function BillingPage() {
 
         try {
             let finalDiscountObj = null;
-            if (discountAmount > 0) {
-                finalDiscountObj = { type: discountType, value: parsedDiscount, amount: discountAmount };
-            }
+            const hasRegularDiscount = discountAmount > 0;
+            const hasLoyalty = redeemPoints && loyaltyDiscountAmount > 0;
 
-            if (redeemPoints && loyaltyDiscountAmount > 0) {
+            if (hasRegularDiscount && hasLoyalty) {
+                const totalAmount = discountAmount + loyaltyDiscountAmount;
+                finalDiscountObj = {
+                    type: 'flat',
+                    value: totalAmount,
+                    amount: totalAmount
+                };
+            } else if (hasRegularDiscount) {
+                finalDiscountObj = { type: discountType, value: parsedDiscount, amount: discountAmount };
+            } else if (hasLoyalty) {
                 finalDiscountObj = {
                     type: 'Loyalty',
-                    value: (finalDiscountObj?.amount || 0) + loyaltyDiscountAmount,
-                    amount: (finalDiscountObj?.amount || 0) + loyaltyDiscountAmount
+                    value: loyaltyDiscountAmount,
+                    amount: loyaltyDiscountAmount
                 };
             }
 
@@ -999,41 +959,17 @@ export default function BillingPage() {
                             <div className="receipt-preview">
                                 {receiptText}
                                 {/* Dynamic UPI QR Code */}
+                                {/* Dynamic UPI QR Code */}
                                 {paymentMethod === 'UPI' && activeSaleRecord && (
-                                    <div style={{ 
-                                        textAlign: 'center', 
-                                        margin: '16px 0', 
-                                        padding: '16px 12px', 
-                                        background: 'rgba(255, 255, 255, 0.02)', 
-                                        borderRadius: 12, 
-                                        border: '1px solid var(--border-color)' 
-                                    }}>
-                                        <div style={{ 
-                                            fontSize: '0.75rem', 
-                                            fontWeight: 700, 
-                                            color: 'var(--primary-400)', 
-                                            textTransform: 'uppercase', 
-                                            letterSpacing: '0.5px', 
-                                            marginBottom: 10 
-                                        }}>
-                                            Scan to Pay via UPI
-                                        </div>
-                                        <div style={{ 
-                                            background: '#fff', 
-                                            padding: 8, 
-                                            display: 'inline-block', 
-                                            borderRadius: 8, 
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)' 
-                                        }}>
-                                            <img 
-                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${settings.upi_id || 'merchant@upi'}&pn=${encodeURIComponent(settings.shop_name || 'BillMate')}&am=${Number(activeSaleRecord.total).toFixed(2)}&tn=Invoice_${activeSaleRecord.id}`)}`} 
-                                                alt="UPI QR Code" 
-                                                style={{ width: 150, height: 150, display: 'block' }}
-                                            />
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
-                                            Amount: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatCurrency(activeSaleRecord.total)}</span>
-                                        </div>
+                                    <div style={{ margin: '16px 0' }}>
+                                        <UpiPaymentQr
+                                            vpa={settings.upi_id || 'merchant@upi'}
+                                            shopName={settings.shop_name || 'BillMate'}
+                                            amount={activeSaleRecord.total}
+                                            note={`Invoice_${activeSaleRecord.id}`}
+                                            currency={settings.currency || '₹'}
+                                            onCopySuccess={() => showToast('UPI ID copied to clipboard!')}
+                                        />
                                     </div>
                                 )}
 

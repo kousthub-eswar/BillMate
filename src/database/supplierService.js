@@ -19,7 +19,8 @@ export async function getAllSuppliers() {
 }
 
 export async function getSupplierById(id) {
-    const { data } = await supabase.from('suppliers').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('suppliers').select('*').eq('id', id).single();
+    if (error && error.code !== 'PGRST116') throw error;
     return data;
 }
 

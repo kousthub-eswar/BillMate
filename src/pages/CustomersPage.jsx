@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Users, UserPlus, Search, Phone,
     History, RotateCcw, AlertTriangle
@@ -34,37 +34,36 @@ export default function CustomersPage() {
         setCurrency(c);
     };
 
-    const loadCustomers = async () => {
+    const loadCustomers = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
             const all = await getAllCustomers();
             all.sort((a, b) => b.balance - a.balance);
             setCustomers(all);
-        } catch (err) {
+        } catch (_err) {
             setError(true);
             showToast('Failed to load customers', 'error');
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
 
-    const handleSearch = async (val) => {
+    const handleSearch = useCallback(async (val) => {
         setLoading(true);
         setError(false);
         try {
             const results = await searchCustomers(val);
             setCustomers(results);
-        } catch (err) {
+        } catch (_err) {
             setError(true);
             showToast('Failed to search customers', 'error');
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
 
     useEffect(() => {
-        loadCustomers();
         loadCurrency();
     }, []);
 
@@ -74,7 +73,7 @@ export default function CustomersPage() {
         } else {
             loadCustomers();
         }
-    }, [query]);
+    }, [query, handleSearch, loadCustomers]);
 
     const handleAdd = async () => {
         const newErrors = {};
@@ -134,16 +133,16 @@ export default function CustomersPage() {
         }
     };
 
-    const loadHistory = async (customer) => {
+    const loadHistory = useCallback(async (customer) => {
         if (!customer) return;
         try {
             const result = await getCustomerHistory(customer.id, historyPage, 25);
             setHistory(result.data);
             setHistoryTotalCount(result.count);
-        } catch (err) {
+        } catch (_err) {
             showToast('Failed to load transaction history', 'error');
         }
-    };
+    }, [historyPage, showToast]);
 
     const viewHistory = async (customer) => {
         setHistoryPage(1);
@@ -155,7 +154,7 @@ export default function CustomersPage() {
         if (showHistoryModal) {
             loadHistory(showHistoryModal);
         }
-    }, [showHistoryModal, historyPage]);
+    }, [showHistoryModal, loadHistory]);
 
     return (
         <div className="page-content">

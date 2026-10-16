@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     ShoppingCart, Truck, Zap, Home, MoreHorizontal,
     Plus, Trash2, Wallet, RotateCcw, AlertTriangle
@@ -38,7 +38,7 @@ export default function ExpensesPage() {
         setCurrency(c);
     };
 
-    const loadExpenses = async () => {
+    const loadExpenses = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -49,18 +49,18 @@ export default function ExpensesPage() {
             setExpenses(result.data);
             setTotalCount(result.count);
             setTodayTotal(total);
-        } catch (err) {
+        } catch (_err) {
             setError(true);
             showToast('Failed to load expenses', 'error');
         } finally {
             setLoading(false);
         }
-    };
+    }, [page, showToast]);
 
     useEffect(() => {
         loadExpenses();
         loadCurrency();
-    }, [page]);
+    }, [loadExpenses]);
 
     const handleAddExpense = async () => {
         const newErrors = {};

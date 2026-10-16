@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Search, Plus, Edit2, Trash2, Package, X,
     ChevronRight, Star, Minus, Scan, PackagePlus,
@@ -73,7 +73,7 @@ export default function ProductsPage() {
         setCategories(['All', ...cats]);
     };
 
-    const loadProducts = async () => {
+    const loadProducts = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -86,7 +86,7 @@ export default function ProductsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [page, query, activeCategory, showToast]);
 
     const openCategoryManager = async () => {
         try {
@@ -110,7 +110,7 @@ export default function ProductsPage() {
 
     useEffect(() => {
         loadProducts();
-    }, [page, query, activeCategory]);
+    }, [loadProducts]);
 
     const openAdd = () => {
         setErrors({});

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     ArrowLeft, DollarSign, TrendingUp, TrendingDown,
     ShoppingCart, Trophy, AlertTriangle, Wallet,
@@ -23,11 +23,7 @@ export default function DaySummaryPage({ onBack }) {
     const showToast = useToast();
     const [error, setError] = useState(false);
 
-    useEffect(() => {
-        loadSummary();
-    }, []);
-
-    const loadSummary = async () => {
+    const loadSummary = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
@@ -55,7 +51,11 @@ export default function DaySummaryPage({ onBack }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
+
+    useEffect(() => {
+        loadSummary();
+    }, [loadSummary]);
 
     const netProfit = stats.totalProfit - expenseTotal;
 
