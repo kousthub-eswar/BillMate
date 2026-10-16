@@ -131,16 +131,54 @@ export async function getTodayStats() {
 }
 
 export async function getDashboardStats(startDate, endDate) {
-    const { data, error } = await supabase.rpc('get_dashboard_stats', {
-        p_start_date: startDate,
-        p_end_date: endDate
-    });
-    if (error) throw error;
+    try {
+        const { data, error } = await supabase.rpc('get_dashboard_stats', {
+            p_start_date: startDate,
+            p_end_date: endDate
+        });
+        if (!error && data) {
+            return {
+                totalRevenue: Number(data.total_revenue) || 0,
+                totalProfit: Number(data.total_profit) || 0,
+                transactionCount: Number(data.transaction_count) || 0,
+                topProducts: data.top_5_products || []
+            };
+        }
+        if (error) {
+            console.warn('get_dashboard_stats RPC unavailable, falling back to direct query:', error.message);
+        }
+    } catch (err) {
+        console.warn('get_dashboard_stats RPC failed, falling back to direct query:', err.message);
+    }
+
+    // Fallback: direct table queries when RPC is not created in Supabase
+    const { data: sales, error: salesError } = await supabase
+        .from('sales')
+        .select('id, total, profit')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .eq('refunded', false)
+        .neq('payment_method', 'Settle');
+
+    if (salesError) throw salesError;
+
+    const list = sales || [];
+    const totalRevenue = list.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const totalProfit = list.reduce((sum, s) => sum + (Number(s.profit) || 0), 0);
+    const transactionCount = list.length;
+
+    let topProducts = [];
+    try {
+        topProducts = await getTopSellingProducts(5);
+    } catch {
+        topProducts = [];
+    }
+
     return {
-        totalRevenue: Number(data.total_revenue) || 0,
-        totalProfit: Number(data.total_profit) || 0,
-        transactionCount: Number(data.transaction_count) || 0,
-        topProducts: data.top_5_products || []
+        totalRevenue,
+        totalProfit,
+        transactionCount,
+        topProducts
     };
 }
 

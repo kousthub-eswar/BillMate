@@ -181,5 +181,21 @@ describe('salesService.js', () => {
                 topProducts: [{ name: 'Product A', quantity: 10 }]
             });
         });
+
+        it('should fallback to direct queries if get_dashboard_stats RPC fails', async () => {
+            supabase.rpc.mockResolvedValue({ data: null, error: new Error('RPC missing') });
+
+            const sales = [
+                { id: 's1', total: 100, profit: 30 },
+                { id: 's2', total: 200, profit: 70 }
+            ];
+            supabase.from.mockReturnValue(createQueryMock(sales));
+
+            const result = await getDashboardStats('2026-05-01T00:00:00Z', '2026-05-31T23:59:59Z');
+
+            expect(result.totalRevenue).toBe(300);
+            expect(result.totalProfit).toBe(100);
+            expect(result.transactionCount).toBe(2);
+        });
     });
 });
