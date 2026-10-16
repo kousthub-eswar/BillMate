@@ -15,6 +15,7 @@ import {
 } from '../database';
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
+import UpiPaymentQr from '../components/UpiPaymentQr';
 
 function _generateEscPosStream(sale, items, settings) {
     const stream = [];
@@ -954,46 +955,15 @@ export default function BillingPage() {
                             ))}
                         </div>
 
-                        {/* Dynamic UPI QR Code during Checkout */}
+                        {/* Dynamic Offline UPI QR Code during Checkout */}
                         {paymentMethod === 'UPI' && (
-                            <div style={{
-                                textAlign: 'center',
-                                margin: '0 0 20px 0',
-                                padding: '16px',
-                                background: 'rgba(255, 255, 255, 0.03)',
-                                borderRadius: 16,
-                                border: '1px solid var(--border-color)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: 10
-                            }}>
-                                <div style={{
-                                    fontSize: '0.78rem',
-                                    fontWeight: 700,
-                                    color: 'var(--primary-400)',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px'
-                                }}>
-                                    Scan & Pay {formatCurrency(cartTotal)}
-                                </div>
-                                <div style={{
-                                    background: '#fff',
-                                    padding: 10,
-                                    display: 'inline-block',
-                                    borderRadius: 12,
-                                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
-                                }}>
-                                    <img
-                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${settings.upi_id || 'merchant@upi'}&pn=${encodeURIComponent(settings.shop_name || 'BillMate')}&am=${cartTotal.toFixed(2)}&tn=Sale_${Date.now()}`)}`}
-                                        alt="UPI QR Code"
-                                        style={{ width: 140, height: 140, display: 'block' }}
-                                    />
-                                </div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                    VPA: {settings.upi_id || 'merchant@upi'}
-                                </div>
-                            </div>
+                            <UpiPaymentQr
+                                vpa={settings.upi_id || 'merchant@upi'}
+                                shopName={settings.shop_name || 'BillMate'}
+                                amount={cartTotal}
+                                note={`Bill_${Date.now().toString().slice(-6)}`}
+                                onCopySuccess={() => showToast('UPI ID copied to clipboard!')}
+                            />
                         )}
 
                         <button

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import {
   LayoutDashboard, ShoppingCart, Package,
   Clock, Settings, Wallet, Users, Truck, ClipboardList,
@@ -9,18 +9,44 @@ import { isAuthenticated, getSession, signOut, onAuthStateChange, updatePassword
 import { ToastProvider, useToast } from './components/Toast';
 import OnboardingWizard from './components/OnboardingWizard';
 import SplashScreen from './components/SplashScreen';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import BillingPage from './pages/BillingPage';
-import ProductsPage from './pages/ProductsPage';
-import SalesPage from './pages/SalesPage';
-import ExpensesPage from './pages/ExpensesPage';
-import CustomersPage from './pages/CustomersPage';
-import SuppliersPage from './pages/SuppliersPage';
-import PurchasesPage from './pages/PurchasesPage';
-import SettingsPage from './pages/SettingsPage';
-import DaySummaryPage from './pages/DaySummaryPage';
 import ErrorBoundary from './components/ErrorBoundary';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const BillingPage = lazy(() => import('./pages/BillingPage'));
+const ProductsPage = lazy(() => import('./pages/ProductsPage'));
+const SalesPage = lazy(() => import('./pages/SalesPage'));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
+const CustomersPage = lazy(() => import('./pages/CustomersPage'));
+const SuppliersPage = lazy(() => import('./pages/SuppliersPage'));
+const PurchasesPage = lazy(() => import('./pages/PurchasesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const DaySummaryPage = lazy(() => import('./pages/DaySummaryPage'));
+
+function PageLoader() {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      gap: 16
+    }}>
+      <div style={{
+        width: 36,
+        height: 36,
+        border: '3px solid var(--border-color)',
+        borderTopColor: 'var(--primary-500)',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+        Loading...
+      </span>
+    </div>
+  );
+}
 
 /* ── Set New Password Screen ── */
 function ResetPasswordPage({ onComplete }) {
@@ -277,7 +303,9 @@ function App() {
     return (
       <ToastProvider>
         {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
-        <LoginPage onLogin={handleLogin} />
+        <Suspense fallback={<PageLoader />}>
+          <LoginPage onLogin={handleLogin} />
+        </Suspense>
       </ToastProvider>
     );
   }
@@ -377,7 +405,9 @@ function App() {
     <ToastProvider>
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <div className="app-container">
-        {renderPage()}
+        <Suspense fallback={<PageLoader />}>
+          {renderPage()}
+        </Suspense>
 
         <nav className="bottom-nav">
           {bottomNavItems.map(({ key, label, icon: Icon, isBilling, isMore }) => {
