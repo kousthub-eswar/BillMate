@@ -16,7 +16,7 @@ import {
 import { generateReceipt, shareOnWhatsApp } from '../backend/receipt';
 import { useToast } from '../components/Toast';
 
-function generateEscPosStream(sale, items, settings) {
+function _generateEscPosStream(sale, items, settings) {
     const stream = [];
     const addCmd = (cmd, desc, hex) => stream.push({ cmd, desc, hex });
 
@@ -86,7 +86,6 @@ export default function BillingPage() {
     const [showReceipt, setShowReceipt] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
     const [receiptText, setReceiptText] = useState('');
-    const [showTelemetry, setShowTelemetry] = useState(false);
     const [activeSaleRecord, setActiveSaleRecord] = useState(null);
     const [customerPhone, setCustomerPhone] = useState('');
     const [settings, setSettings] = useState({});
@@ -116,10 +115,6 @@ export default function BillingPage() {
     });
     const [categories, setCategories] = useState([]);
     const [quickAddLoading, setQuickAddLoading] = useState(false);
-
-    // Quantity Keypad state
-    const [qtyPadItem, setQtyPadItem] = useState(null);
-    const [qtyPadValue, setQtyPadValue] = useState('');
 
     // Cart bottom sheet state
     const [cartOpen, setCartOpen] = useState(false);
@@ -621,10 +616,7 @@ export default function BillingPage() {
                                         <button className="pos-qty-btn" onClick={() => updateQuantity(item.id, -1)}>
                                             <Minus size={14} />
                                         </button>
-                                        <span
-                                            className="pos-qty-value"
-                                            onClick={() => { setQtyPadItem(item); setQtyPadValue(item.quantity.toString()); }}
-                                        >
+                                        <span className="pos-qty-value">
                                             {item.quantity}
                                         </span>
                                         <button className="pos-qty-btn plus" onClick={() => updateQuantity(item.id, 1)}>
@@ -1111,7 +1103,7 @@ export default function BillingPage() {
 
                                 <button
                                     className="btn btn-primary btn-block"
-                                    onClick={() => { setShowReceipt(false); setCustomerPhone(''); setShowTelemetry(false); setActiveSaleRecord(null); }}
+                                    onClick={() => { setShowReceipt(false); setCustomerPhone(''); setActiveSaleRecord(null); }}
                                 >
                                     Done
                                 </button>

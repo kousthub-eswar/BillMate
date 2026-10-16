@@ -25,8 +25,8 @@ export default defineConfig([
     rules: {
       'no-unused-vars': ['error', {
         varsIgnorePattern: '^[A-Z_]',
-        argsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
+        argsIgnorePattern: '^[A-Z_]',
+        caughtErrors: 'none',
         destructuredArrayIgnorePattern: '^_',
       }],
       'react-hooks/set-state-in-effect': 'off',

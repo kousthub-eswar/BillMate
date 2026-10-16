@@ -85,7 +85,7 @@ describe('salesService.js', () => {
             await getSales('week');
             expect(supabase.from().gte).toHaveBeenCalled();
 
-            const paginatedRes = await getSales('today', 2, 25);
+            await getSales('today', 2, 25);
             expect(supabase.from().range).toHaveBeenCalledWith(25, 49);
         });
     });
@@ -138,9 +138,7 @@ describe('salesService.js', () => {
                 { product_name: 'Product B', quantity: 5 }
             ];
 
-            let callCount = 0;
             supabase.from.mockImplementation((table) => {
-                callCount++;
                 if (table === 'sales') {
                     return createQueryMock(sales);
                 } else if (table === 'sale_items') {

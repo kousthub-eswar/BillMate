@@ -170,7 +170,7 @@ describe('productService.js', () => {
             const getProductMock = createQueryMock(product);
             const updateProductMock = createQueryMock({});
             let callCount = 0;
-            supabase.from.mockImplementation((table) => {
+            supabase.from.mockImplementation((_table) => {
                 callCount++;
                 return callCount === 1 ? getProductMock : updateProductMock;
             });

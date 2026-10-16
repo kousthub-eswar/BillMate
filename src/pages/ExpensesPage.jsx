@@ -125,7 +125,6 @@ export default function ExpensesPage() {
                 Expense Type
             </div>
             <div className="expense-type-grid">
-                {/* eslint-disable-next-line no-unused-vars */}
                 {EXPENSE_TYPES.map(({ type, icon: Icon, color, iconColor }) => (
                     <button
                         key={type}

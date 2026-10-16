@@ -57,7 +57,7 @@ export async function importAllData(jsonString) {
         for (const [table, rows] of Object.entries(insertMap)) {
             if (rows?.length) {
                 const cleaned = rows.map(row => {
-                    const { id, ...rest } = row;
+                    const { id: _id, ...rest } = row;
                     const stamped = table === 'settings' ? { ...row, user_id: userId } : { ...rest, user_id: userId };
                     return stamped;
                 });
