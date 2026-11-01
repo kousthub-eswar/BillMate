@@ -4,7 +4,7 @@ export async function getAllProducts(page = null, pageSize = 25, search = '', ca
     let query = supabase.from('products').select('*', { count: 'exact' }).order('name');
 
     if (search && search.trim()) {
-        const lower = search.toLowerCase().trim();
+        const lower = search.toLowerCase().trim().replace(/[,()\\"]/g, ' ');
         query = query.or(`name.ilike.%${lower}%,barcode.ilike.%${lower}%`);
     }
 
@@ -67,7 +67,7 @@ export async function deleteProduct(id) {
 }
 
 export async function searchProducts(query) {
-    const lower = query.toLowerCase();
+    const lower = (query || '').toLowerCase().replace(/[,()\\"]/g, ' ');
     const { data } = await supabase.from('products').select('*').or(`name.ilike.%${lower}%,barcode.ilike.%${lower}%,category.ilike.%${lower}%`);
     return data || [];
 }

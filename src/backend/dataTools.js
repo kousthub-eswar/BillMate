@@ -36,9 +36,9 @@ export async function importAllData(jsonString) {
         const clearOrder = ['sale_items', 'purchase_items', 'sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'settings'];
         for (const table of clearOrder) {
             if (table === 'settings') {
-                await supabase.from(table).delete().neq('key', '');
+                await supabase.from(table).delete().eq('user_id', userId).neq('key', '');
             } else {
-                const { error } = await supabase.from(table).delete().neq('id', -1);
+                const { error } = await supabase.from(table).delete().eq('user_id', userId).neq('id', -1);
                 if (error) throw new Error(`Failed to clear ${table}: ${error.message}`);
             }
         }

@@ -27,6 +27,7 @@ const EMPTY_PRODUCT = {
 export default function ProductsPage() {
     const [filtered, setFiltered] = useState([]);
     const [query, setQuery] = useState('');
+    const [debouncedQuery, setDebouncedQuery] = useState('');
     const [categories, setCategories] = useState([]);
     const [activeCategory, setActiveCategory] = useState('All');
     const [showForm, setShowForm] = useState(false);
@@ -73,11 +74,18 @@ export default function ProductsPage() {
         setCategories(['All', ...cats]);
     };
 
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedQuery(query);
+        }, 250);
+        return () => clearTimeout(handler);
+    }, [query]);
+
     const loadProducts = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
-            const result = await getAllProducts(page, 25, query, activeCategory);
+            const result = await getAllProducts(page, 25, debouncedQuery, activeCategory);
             setFiltered(result.data);
             setTotalCount(result.count);
         } catch (err) {
@@ -86,7 +94,7 @@ export default function ProductsPage() {
         } finally {
             setLoading(false);
         }
-    }, [page, query, activeCategory, showToast]);
+    }, [page, debouncedQuery, activeCategory, showToast]);
 
     const openCategoryManager = async () => {
         try {
@@ -106,7 +114,7 @@ export default function ProductsPage() {
 
     useEffect(() => {
         setPage(1);
-    }, [query, activeCategory]);
+    }, [debouncedQuery, activeCategory]);
 
     useEffect(() => {
         loadProducts();

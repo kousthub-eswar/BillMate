@@ -135,6 +135,15 @@ describe('productService.js', () => {
             expect(supabase.from().or).toHaveBeenCalledWith('name.ilike.%query%,barcode.ilike.%query%,category.ilike.%query%');
             expect(res).toEqual(list);
         });
+
+        it('should sanitize commas and special characters from search query to prevent PostgREST syntax errors', async () => {
+            const list = [{ name: 'Sugar 1kg' }];
+            supabase.from.mockReturnValue(createQueryMock(list));
+
+            await searchProducts('Sugar, 1kg');
+
+            expect(supabase.from().or).toHaveBeenCalledWith('name.ilike.%sugar  1kg%,barcode.ilike.%sugar  1kg%,category.ilike.%sugar  1kg%');
+        });
     });
 
     describe('getFrequentProducts', () => {

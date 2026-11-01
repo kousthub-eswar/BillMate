@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
     Clock, ChevronDown, ChevronUp, RotateCcw,
-    ShoppingBag, Search, Filter, AlertTriangle
+    ShoppingBag, Search, Filter, AlertTriangle,
+    X, MessageCircle
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -24,6 +25,7 @@ export default function SalesPage() {
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const [shareSaleModal, setShareSaleModal] = useState(null);
 
     useEffect(() => {
         setPage(1);
@@ -90,12 +92,17 @@ export default function SalesPage() {
     };
 
     const handleShareReceipt = async (sale) => {
-        const detail = await getSaleById(sale.id);
-        const settings = await getAllSettings();
-        const receipt = generateReceipt(detail, detail.items, settings);
-        const phone = prompt('Enter customer phone number (with country code):');
-        if (phone) {
-            shareOnWhatsApp(phone, receipt);
+        try {
+            const detail = await getSaleById(sale.id);
+            const settings = await getAllSettings();
+            const receipt = generateReceipt(detail, detail.items, settings);
+            setShareSaleModal({
+                sale,
+                receiptText: receipt,
+                phone: detail.customers?.phone || ''
+            });
+        } catch (_err) {
+            showToast('Failed to prepare receipt', 'error');
         }
     };
 
@@ -415,6 +422,44 @@ export default function SalesPage() {
                     onConfirm={() => handleRefund(showRefundConfirm.id)}
                     onCancel={() => setShowRefundConfirm(null)}
                 />
+            )}
+
+            {/* Share Receipt Modal */}
+            {shareSaleModal && (
+                <div className="modal-overlay" onClick={() => setShareSaleModal(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Share Receipt via WhatsApp</h3>
+                            <button className="btn-icon" onClick={() => setShareSaleModal(null)}><X size={18} /></button>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                            Enter the customer&apos;s phone number with country code (e.g. 919876543210):
+                        </p>
+                        <input
+                            type="tel"
+                            className="form-input"
+                            placeholder="e.g. 919876543210"
+                            value={shareSaleModal.phone}
+                            onChange={e => setShareSaleModal(prev => ({ ...prev, phone: e.target.value }))}
+                            style={{ marginBottom: 16 }}
+                            autoFocus
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button className="btn btn-secondary" onClick={() => setShareSaleModal(null)}>Cancel</button>
+                            <button
+                                className="btn btn-success"
+                                disabled={!shareSaleModal.phone.trim()}
+                                onClick={() => {
+                                    shareOnWhatsApp(shareSaleModal.phone.trim(), shareSaleModal.receiptText);
+                                    setShareSaleModal(null);
+                                    showToast('Opening WhatsApp...');
+                                }}
+                            >
+                                <MessageCircle size={16} style={{ marginRight: 6 }} /> Send Receipt
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

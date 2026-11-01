@@ -13,6 +13,7 @@ import { useToast } from '../components/Toast';
 export default function CustomersPage() {
     const [customers, setCustomers] = useState([]);
     const [query, setQuery] = useState('');
+    const [debouncedQuery, setDebouncedQuery] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showSettleModal, setShowSettleModal] = useState(null); // Customer object
     const [showHistoryModal, setShowHistoryModal] = useState(null); // Customer object
@@ -68,12 +69,19 @@ export default function CustomersPage() {
     }, []);
 
     useEffect(() => {
-        if (query.trim()) {
-            handleSearch(query);
+        const timer = setTimeout(() => {
+            setDebouncedQuery(query);
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [query]);
+
+    useEffect(() => {
+        if (debouncedQuery.trim()) {
+            handleSearch(debouncedQuery);
         } else {
             loadCustomers();
         }
-    }, [query, handleSearch, loadCustomers]);
+    }, [debouncedQuery, handleSearch, loadCustomers]);
 
     const handleAdd = async () => {
         const newErrors = {};

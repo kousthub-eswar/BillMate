@@ -75,6 +75,7 @@ describe('dataTools.js', () => {
 
             expect(getCurrentUserId).toHaveBeenCalled();
             expect(supabase.from().delete).toHaveBeenCalledTimes(9);
+            expect(supabase.from().eq).toHaveBeenCalledWith('user_id', 'test-user-id');
             expect(supabase.from().insert).toHaveBeenCalledTimes(3);
             expect(result).toEqual({ success: true, message: 'Data imported successfully' });
         });

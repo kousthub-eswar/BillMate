@@ -70,7 +70,7 @@ export async function getSales(filter = 'today', page = null, pageSize = 25, sea
         const qTrim = searchQuery.trim();
         const { data: matchedCustomers } = await supabase.from('customers').select('id').ilike('name', `%${qTrim}%`);
         const customerIds = matchedCustomers ? matchedCustomers.map(c => c.id) : [];
-        const isNum = !isNaN(qTrim);
+        const isNum = /^\d+$/.test(qTrim);
 
         if (isNum && customerIds.length > 0) {
             query = query.or(`id.eq.${qTrim},customer_id.in.(${customerIds.join(',')})`);

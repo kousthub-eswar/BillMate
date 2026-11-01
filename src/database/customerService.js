@@ -68,7 +68,7 @@ export async function getCustomerHistory(customerId, page = null, pageSize = 25)
 }
 
 export async function searchCustomers(query) {
-    const lower = query.toLowerCase();
+    const lower = (query || '').toLowerCase().replace(/[,()\\"]/g, ' ');
     const { data } = await supabase.from('customers').select('*').or(`name.ilike.%${lower}%,phone.ilike.%${lower}%`);
     return data || [];
 }

@@ -28,6 +28,7 @@ export default function BillingPage() {
     const [receiptText, setReceiptText] = useState('');
     const [activeSaleRecord, setActiveSaleRecord] = useState(null);
     const [customerPhone, setCustomerPhone] = useState('');
+    const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [settings, setSettings] = useState({});
     const [lowStockThreshold, setLowStockThreshold] = useState(5);
     const [customers, setCustomers] = useState([]);
@@ -254,7 +255,7 @@ export default function BillingPage() {
     const cartTotal = Math.max(0, cartSubtotal - discountAmount - loyaltyDiscountAmount);
 
     const handleCheckout = async () => {
-        if (cart.length === 0) return;
+        if (cart.length === 0 || checkoutLoading) return;
 
         if (paymentMethod === 'Credit' && !selectedCustomer) {
             showToast('A customer is required for credit sales', 'error');
@@ -262,6 +263,7 @@ export default function BillingPage() {
             return;
         }
 
+        setCheckoutLoading(true);
         try {
             let finalDiscountObj = null;
             const hasRegularDiscount = discountAmount > 0;
@@ -290,6 +292,9 @@ export default function BillingPage() {
 
             setActiveSaleRecord(sale);
             setReceiptText(receipt);
+            if (selectedCustomer?.phone) {
+                setCustomerPhone(selectedCustomer.phone);
+            }
             setShowCheckout(false);
             setShowReceipt(true);
             setCart([]);
@@ -304,6 +309,8 @@ export default function BillingPage() {
             loadFrequent();
         } catch (_err) {
             showToast('Checkout failed', 'error');
+        } finally {
+            setCheckoutLoading(false);
         }
     };
 
@@ -929,9 +936,11 @@ export default function BillingPage() {
                         <button
                             className="btn btn-success btn-lg btn-block"
                             onClick={handleCheckout}
+                            disabled={checkoutLoading}
                             id="confirm-checkout"
+                            style={{ opacity: checkoutLoading ? 0.7 : 1 }}
                         >
-                            Complete Sale
+                            {checkoutLoading ? 'Processing...' : 'Complete Sale'}
                         </button>
                     </div>
                 </div >
