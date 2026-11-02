@@ -387,7 +387,8 @@ export default function ProductsPage() {
                     )}
                 </div>
             ) : (
-                filtered.map(product => {
+                <div className="products-card-grid">
+                    {filtered.map(product => {
                     const isOutOfStock = product.stock_quantity <= 0;
                     const isLowStock = product.stock_quantity > 0 && product.stock_quantity <= lowStockThreshold;
                     return (
@@ -449,7 +450,8 @@ export default function ProductsPage() {
                             </div>
                         </div>
                     );
-                })
+                })}
+                </div>
             )}
 
             {totalCount > 25 && (

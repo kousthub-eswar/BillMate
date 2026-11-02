@@ -243,13 +243,13 @@ export default function DaySummaryPage({ onBack }) {
                     borderRadius: '50%',
                     background: 'rgba(255,255,255,0.05)'
                 }} />
-                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(0,0,0,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
                     Total Revenue
                 </div>
-                <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#000', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
                     {currency}{stats.totalRevenue.toFixed(2)}
                 </div>
-                <div style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(0,0,0,0.5)', marginTop: 4 }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(255,255,255,0.75)', marginTop: 4 }}>
                     from {stats.transactionCount} transaction{stats.transactionCount !== 1 ? 's' : ''}
                 </div>
             </div>
@@ -318,7 +318,9 @@ export default function DaySummaryPage({ onBack }) {
                 </div>
             </div>
 
-            {/* Top Selling Product */}
+            <div className="dashboard-grid">
+                <div className="dashboard-column">
+                    {/* Top Selling Product */}
             <div className="dashboard-section" style={{ marginBottom: 16 }}>
                 <div className="dashboard-section-header">
                     <h3>
@@ -362,8 +364,9 @@ export default function DaySummaryPage({ onBack }) {
                     </div>
                 )}
             </div>
-
-            {/* Low Stock Items */}
+                </div>
+                <div className="dashboard-column">
+                    {/* Low Stock Items */}
             <div className="dashboard-section">
                 <div className="dashboard-section-header">
                     <h3>
@@ -392,6 +395,8 @@ export default function DaySummaryPage({ onBack }) {
                         </div>
                     ))
                 )}
+            </div>
+                </div>
             </div>
 
             {/* Close Day Button */}

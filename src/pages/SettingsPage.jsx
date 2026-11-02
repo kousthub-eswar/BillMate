@@ -2,16 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Store, DollarSign, AlertTriangle, MessageSquare,
     Download, Upload, LogOut, ChevronRight, FileText, Smartphone,
-    Sun, Moon, ShieldAlert, ShieldCheck, RotateCcw, Phone, MapPin
+    Sun, Moon, ShieldAlert, ShieldCheck, RotateCcw, Phone, MapPin,
+    KeyRound, Lock
 } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { getAllSettings, setSetting, DEFAULT_SETTINGS } from '../database';
+import {
+    getAllSettings, setSetting, DEFAULT_SETTINGS,
+    enrollOfflinePin, hasEnrolledPin, getActiveUserId, supabase
+} from '../database';
 import { exportAllData, importAllData } from '../backend';
 import { useToast } from '../components/Toast';
 
 export default function SettingsPage({ onLogout }) {
     const [settings, setSettings] = useState({});
+    const [hasPinEnrolled, setHasPinEnrolled] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
+    const [pinForm, setPinForm] = useState({ pin: '', confirmPin: '' });
+    const [pinLoading, setPinLoading] = useState(false);
+    const [pinError, setPinError] = useState('');
     const [showEditModal, setShowEditModal] = useState(null);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [showExportConfirm, setShowExportConfirm] = useState(false);
@@ -53,11 +62,51 @@ export default function SettingsPage({ onLogout }) {
     const loadSettings = async () => {
         const s = await getAllSettings();
         setSettings(s);
+        try {
+            const uid = await getActiveUserId();
+            if (uid) {
+                const enrolled = await hasEnrolledPin(uid);
+                setHasPinEnrolled(enrolled);
+            }
+        } catch {}
     };
 
     useEffect(() => {
         loadSettings();
     }, []);
+
+    const handleEnrollPin = async (e) => {
+        e.preventDefault();
+        setPinError('');
+        if (!pinForm.pin || pinForm.pin.length < 4 || pinForm.pin.length > 8) {
+            setPinError('PIN must be between 4 and 8 digits.');
+            return;
+        }
+        if (pinForm.pin !== pinForm.confirmPin) {
+            setPinError('PINs do not match.');
+            return;
+        }
+
+        setPinLoading(true);
+        try {
+            const userId = await getActiveUserId();
+            if (!userId) throw new Error('You must be signed in to configure an offline PIN.');
+            let email = '';
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                email = user?.email || '';
+            } catch {}
+            await enrollOfflinePin(userId, pinForm.pin, email);
+            setHasPinEnrolled(true);
+            setShowPinModal(false);
+            setPinForm({ pin: '', confirmPin: '' });
+            showToast(hasPinEnrolled ? 'Offline PIN updated successfully!' : 'Offline PIN enrolled! You can now unlock your workspace offline.');
+        } catch (err) {
+            setPinError(err.message || 'Failed to enroll PIN.');
+        } finally {
+            setPinLoading(false);
+        }
+    };
 
     const openEdit = (key, value) => {
         setErrors({});
@@ -203,7 +252,9 @@ export default function SettingsPage({ onLogout }) {
         <div className="page-content">
             <AppHeader title="Settings" />
 
-            {/* Appearance */}
+            <div className="settings-grid">
+                <div className="settings-column">
+                    {/* Appearance */}
             <div className="settings-group">
                 <div className="settings-group-title">Appearance</div>
 
@@ -309,8 +360,9 @@ export default function SettingsPage({ onLogout }) {
                     <ChevronRight size={18} color="var(--text-muted)" />
                 </div>
             </div>
-
-            {/* Data Tools */}
+                </div>
+                <div className="settings-column">
+                    {/* Data Tools */}
             <div className="settings-group">
                 <div className="settings-group-title">Data Management</div>
 
@@ -431,6 +483,8 @@ export default function SettingsPage({ onLogout }) {
                     <div style={{ marginTop: 8, color: 'var(--accent-400)' }}>✓ Installed as App</div>
                 )}
             </div>
+                </div>
+            </div>
 
             {/* Edit Setting Modal */}
             {showEditModal && (
@@ -495,6 +549,90 @@ export default function SettingsPage({ onLogout }) {
                     onConfirm={handleExport}
                     onCancel={() => setShowExportConfirm(false)}
                 />
+            )}
+
+            {showPinModal && (
+                <div className="modal-overlay" onClick={() => setShowPinModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                        <div className="modal-header">
+                            <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <KeyRound size={20} color="var(--primary-400)" />
+                                {hasPinEnrolled ? 'Change Offline PIN' : 'Set Offline Security PIN'}
+                            </h3>
+                            <button className="modal-close" onClick={() => setShowPinModal(false)}>✕</button>
+                        </div>
+                        <div className="modal-body" style={{ marginTop: 12 }}>
+                            <div style={{
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                padding: 12,
+                                borderRadius: 8,
+                                marginBottom: 16,
+                                fontSize: '0.82rem',
+                                color: 'var(--text-secondary)',
+                                lineHeight: 1.5
+                            }}>
+                                🔒 <strong>Offline Protection:</strong> Your PIN allows you to unlock your local POS workspace when this device has no internet connection. This PIN is securely hashed using PBKDF2 locally on this device and does not grant cloud access.
+                            </div>
+
+                            <form onSubmit={handleEnrollPin}>
+                                <div className="form-group" style={{ marginBottom: 14 }}>
+                                    <label className="form-label">New PIN (4–8 digits)</label>
+                                    <input
+                                        type="password"
+                                        maxLength={8}
+                                        pattern="[0-9]*"
+                                        inputMode="numeric"
+                                        className="form-input"
+                                        placeholder="Enter 4-8 digits"
+                                        value={pinForm.pin}
+                                        onChange={e => setPinForm({ ...pinForm, pin: e.target.value.replace(/\D/g, '') })}
+                                        autoFocus
+                                        required
+                                        id="settings-offline-pin-input"
+                                    />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 16 }}>
+                                    <label className="form-label">Confirm PIN</label>
+                                    <input
+                                        type="password"
+                                        maxLength={8}
+                                        pattern="[0-9]*"
+                                        inputMode="numeric"
+                                        className="form-input"
+                                        placeholder="Re-enter PIN"
+                                        value={pinForm.confirmPin}
+                                        onChange={e => setPinForm({ ...pinForm, confirmPin: e.target.value.replace(/\D/g, '') })}
+                                        required
+                                        id="settings-offline-confirm-pin-input"
+                                    />
+                                </div>
+                                {pinError && (
+                                    <div style={{ color: 'var(--danger-400)', fontSize: '0.8rem', marginBottom: 12, fontWeight: 500 }}>
+                                        {pinError}
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowPinModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="btn btn-primary"
+                                        disabled={pinLoading}
+                                        id="save-offline-pin-btn"
+                                    >
+                                        {pinLoading ? 'Saving...' : (hasPinEnrolled ? 'Update PIN' : 'Enroll PIN')}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showResetConfirm && (

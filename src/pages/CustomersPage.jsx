@@ -283,7 +283,8 @@ export default function CustomersPage() {
                         )}
                     </div>
                 ) : (
-                    customers.map(c => (
+                    <div className="customers-cards-grid">
+                    {customers.map(c => (
                         <div key={c.id} className="customer-item" onClick={() => viewHistory(c)}>
                             <div className="customer-avatar">
                                 {c.name.charAt(0).toUpperCase()}
@@ -309,7 +310,8 @@ export default function CustomersPage() {
                                 )}
                             </div>
                         </div>
-                    ))
+                    ))}
+                    </div>
                 )}
             </div>
 

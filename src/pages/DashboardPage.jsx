@@ -403,11 +403,7 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
                     Quick Actions
                 </div>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: 10
-                }}>
+                <div className="quick-actions-grid">
                     {[
                         { label: 'New Sale', icon: ShoppingCart, color: 'var(--accent-400)', bg: 'rgba(22, 163, 74, 0.1)', page: 'billing' },
                         { label: 'Add Product', icon: Package, color: 'var(--primary-400)', bg: 'rgba(59, 130, 246, 0.1)', page: 'products' },
@@ -534,7 +530,9 @@ export default function DashboardPage({ onNavigate }) {
             </div>
 
 
-            {/* Weekly Revenue Trend */}
+            <div className="dashboard-grid">
+                <div className="dashboard-column">
+                    {/* Weekly Revenue Trend */}
             <div className="dashboard-section">
                 <div className="dashboard-section-header">
                     <h3>
@@ -614,7 +612,57 @@ export default function DashboardPage({ onNavigate }) {
                 )}
             </div>
 
-            {/* Low Stock Alerts */}
+                    {/* Profit Margin Report */}
+            {loading ? (
+                <div className="dashboard-section">
+                    <div className="dashboard-section-header">
+                        <h3>
+                            <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
+                            Top Profit Margins
+                        </h3>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[1, 2].map(n => (
+                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50, display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div className="skeleton-box" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+                                <div className="skeleton-box" style={{ width: '50%', height: 16 }} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                profitReport.length > 0 && (
+                    <div className="dashboard-section">
+                        <div className="dashboard-section-header">
+                            <h3>
+                                <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
+                                Top Profit Margins
+                            </h3>
+                        </div>
+                        {profitReport.map((item, i) => (
+                            <div key={item.name} className="top-product-item">
+                                <div className="top-product-rank" style={{
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    color: 'var(--accent-400)'
+                                }}>{i + 1}</div>
+                                <div className="top-product-info">
+                                    <div className="top-product-name">{item.name}</div>
+                                    <div className="top-product-qty">
+                                        Margin: {formatCurrency(item.margin)} ({item.marginPercent.toFixed(0)}%)
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-400)' }}>
+                                    {formatCurrency(item.sellingPrice)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            )}
+                </div>
+
+                <div className="dashboard-column">
+                    {/* Low Stock Alerts */}
             <div className="dashboard-section">
                 <div className="dashboard-section-header">
                     <h3>
@@ -759,54 +807,8 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                 )
             )}
-
-            {/* Profit Margin Report */}
-            {loading ? (
-                <div className="dashboard-section">
-                    <div className="dashboard-section-header">
-                        <h3>
-                            <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
-                            Top Profit Margins
-                        </h3>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {[1, 2].map(n => (
-                            <div key={n} className="skeleton-shimmer" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', height: 50, display: 'flex', alignItems: 'center', gap: 14 }}>
-                                <div className="skeleton-box" style={{ width: 30, height: 30, borderRadius: '50%' }} />
-                                <div className="skeleton-box" style={{ width: '50%', height: 16 }} />
-                            </div>
-                        ))}
-                    </div>
                 </div>
-            ) : (
-                profitReport.length > 0 && (
-                    <div className="dashboard-section">
-                        <div className="dashboard-section-header">
-                            <h3>
-                                <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle', color: 'var(--accent-400)' }} />
-                                Top Profit Margins
-                            </h3>
-                        </div>
-                        {profitReport.map((item, i) => (
-                            <div key={item.name} className="top-product-item">
-                                <div className="top-product-rank" style={{
-                                    background: 'rgba(16, 185, 129, 0.1)',
-                                    color: 'var(--accent-400)'
-                                }}>{i + 1}</div>
-                                <div className="top-product-info">
-                                    <div className="top-product-name">{item.name}</div>
-                                    <div className="top-product-qty">
-                                        Margin: {formatCurrency(item.margin)} ({item.marginPercent.toFixed(0)}%)
-                                    </div>
-                                </div>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-400)' }}>
-                                    {formatCurrency(item.sellingPrice)}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )
-            )}
+            </div>
 
             {/* Alerts Panel */}
             <AlertsPanel

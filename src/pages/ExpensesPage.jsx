@@ -271,7 +271,8 @@ export default function ExpensesPage() {
                         <p>Tap a category above to record your first expense for the day.</p>
                     </div>
                 ) : (
-                    expenses.map(expense => {
+                    <div className="expenses-cards-grid">
+                {expenses.map(expense => {
                         const config = getTypeConfig(expense.type);
                         const Icon = config.icon;
                         return (
@@ -298,7 +299,8 @@ export default function ExpensesPage() {
                                 </button>
                             </div>
                         );
-                    })
+                    })}
+                    </div>
                 )}
             </div>
 

@@ -20,7 +20,9 @@ export default function AppHeader({ title, children }) {
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                <Logo size={34} iconSize={18} borderRadius={10} />
+                <div className="app-header-brand" style={{ display: 'flex', alignItems: 'center' }}>
+                    <Logo size={34} iconSize={18} borderRadius={10} />
+                </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ fontSize: '0.6rem', color: 'var(--primary-400)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>

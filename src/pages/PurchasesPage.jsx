@@ -377,7 +377,8 @@ export default function PurchasesPage() {
                     </button>
                 </div>
             ) : (
-                purchases.map(purchase => (
+                <div className="purchases-cards-grid">
+                    {purchases.map(purchase => (
                     <div key={purchase.id} className="sale-card" onClick={() => handleExpand(purchase.id)} style={{ cursor: 'pointer' }}>
                         <div className="sale-card-header">
                             <div>
@@ -430,7 +431,8 @@ export default function PurchasesPage() {
                             </div>
                         )}
                     </div>
-                ))
+                ))}
+                </div>
             )}
 
             {totalCount > 25 && (

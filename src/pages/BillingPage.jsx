@@ -390,10 +390,262 @@ export default function BillingPage() {
             showToast(err.message || 'Failed to create customer', 'error');
         }
     };
+    const renderCartContent = (isDesktop = false) => {
+        if (isDesktop && cart.length === 0) {
+            return (
+                <div className="pos-cart-panel-inner empty">
+                    <div className="pos-cart-header">
+                        <div className="pos-cart-title">
+                            <ShoppingBag size={20} />
+                            <span>Current Order</span>
+                            <span className="pos-cart-badge">0</span>
+                        </div>
+                    </div>
+                    <div className="pos-cart-empty-desktop">
+                        <div style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: '50%',
+                            background: 'var(--bg-elevated)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 16px',
+                            color: 'var(--text-muted)'
+                        }}>
+                            <ShoppingBag size={30} />
+                        </div>
+                        <h4 style={{ margin: '0 0 6px', fontSize: '1.05rem', color: 'var(--text-primary)' }}>Cart is Empty</h4>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.4 }}>
+                            Select items from the catalog or scan barcodes to begin a transaction.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="pos-cart-panel-inner">
+                <div className="pos-cart-header">
+                    <div className="pos-cart-title">
+                        <ShoppingBag size={20} />
+                        <span>Current Order</span>
+                        <span className="pos-cart-badge">{cartCount}</span>
+                    </div>
+                    {isDesktop ? (
+                        cart.length > 0 && (
+                            <button
+                                className="pos-clear-btn"
+                                onClick={clearCart}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                title="Clear Cart"
+                            >
+                                <Trash2 size={13} /> Clear
+                            </button>
+                        )
+                    ) : (
+                        <button className="pos-cart-close" onClick={() => setCartOpen(false)}>
+                            <ChevronDown size={20} />
+                        </button>
+                    )}
+                </div>
+
+                {selectedCustomer ? (
+                    <div className="pos-cart-customer">
+                        <Users size={14} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {selectedCustomer.name}
+                        </span>
+                        <button
+                            onClick={() => setSelectedCustomer(null)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+                            title="Remove Customer"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                ) : (
+                    <div style={{ marginBottom: 12 }}>
+                        <select
+                            className="form-input"
+                            style={{ fontSize: '0.8rem', padding: '6px 10px', height: 'auto' }}
+                            value=""
+                            onChange={(e) => {
+                                const c = customers.find(cust => cust.id === e.target.value);
+                                if (c) setSelectedCustomer(c);
+                            }}
+                        >
+                            <option value="">+ Assign Customer (Optional)</option>
+                            {customers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="pos-cart-items">
+                    {cart.map(item => (
+                        <div key={item.id} className="pos-cart-item">
+                            <div className="pos-cart-item-avatar">
+                                {item.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="pos-cart-item-details">
+                                <div className="pos-cart-item-name">{item.name}</div>
+                                <div className="pos-cart-item-price">{formatCurrency(item.selling_price)}</div>
+                            </div>
+                            <div className="pos-cart-qty-controls">
+                                <button className="pos-qty-btn" onClick={() => updateQuantity(item.id, -1)}>
+                                    <Minus size={14} />
+                                </button>
+                                <span className="pos-qty-value">
+                                    {item.quantity}
+                                </span>
+                                <button className="pos-qty-btn plus" onClick={() => updateQuantity(item.id, 1)}>
+                                    <Plus size={14} />
+                                </button>
+                            </div>
+                            <button className="pos-cart-remove" onClick={() => removeFromCart(item.id)}>
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+
+                {!showDiscount ? (
+                    <button
+                        className="pos-discount-trigger"
+                        onClick={() => setShowDiscount(true)}
+                    >
+                        <Tag size={16} />
+                        Add Discount
+                    </button>
+                ) : (
+                    <div className="pos-discount-section">
+                        <div className="pos-discount-header">
+                            <div className="pos-discount-label">
+                                <Tag size={14} />
+                                Discount
+                            </div>
+                            <button
+                                className="pos-discount-close"
+                                onClick={() => { setShowDiscount(false); setDiscountValue(''); }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="pos-discount-controls">
+                            <div className="pos-discount-toggle">
+                                <button
+                                    className={`pos-discount-type-btn ${discountType === 'flat' ? 'active' : ''}`}
+                                    onClick={() => setDiscountType('flat')}
+                                >
+                                    {currency}
+                                </button>
+                                <button
+                                    className={`pos-discount-type-btn ${discountType === 'percent' ? 'active' : ''}`}
+                                    onClick={() => setDiscountType('percent')}
+                                >
+                                    <Percent size={14} />
+                                </button>
+                            </div>
+                            <input
+                                type="number"
+                                inputMode="decimal"
+                                placeholder={discountType === 'flat' ? 'Amount' : 'Percentage'}
+                                value={discountValue}
+                                onChange={(e) => setDiscountValue(e.target.value)}
+                                className="pos-discount-input"
+                                id={isDesktop ? "discount-input-desktop" : "discount-input"}
+                            />
+                        </div>
+                        {discountError && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{discountError}</p>}
+                        {discountAmount > 0 && (
+                            <div className="pos-discount-preview">
+                                <span>Saving</span>
+                                <span>-{currency}{discountAmount.toFixed(2)}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {selectedCustomer && customerLoyaltyPoints > 0 && (
+                    <div style={{
+                        marginTop: 10,
+                        padding: '10px 12px',
+                        background: 'rgba(234, 179, 8, 0.08)',
+                        border: '1px solid rgba(234, 179, 8, 0.2)',
+                        borderRadius: 'var(--radius-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--warning-400)' }}>
+                                Loyalty Points: {customerLoyaltyPoints}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                Worth {formatCurrency(customerLoyaltyPoints)} discount
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className={`btn btn-sm ${redeemPoints ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setRedeemPoints(!redeemPoints)}
+                            style={{ fontSize: '0.72rem', padding: '4px 10px' }}
+                        >
+                            {redeemPoints ? 'Redeemed' : 'Redeem'}
+                        </button>
+                    </div>
+                )}
+
+                <div className="pos-cart-summary">
+                    <div className="pos-summary-row">
+                        <span>Subtotal</span>
+                        <span>{formatCurrency(cartSubtotal)}</span>
+                    </div>
+                    {discountAmount > 0 && (
+                        <div className="pos-summary-row discount">
+                            <span>Discount</span>
+                            <span>-{formatCurrency(discountAmount)}</span>
+                        </div>
+                    )}
+                    <div className="pos-summary-divider" />
+                    <div className="pos-summary-row total">
+                        <span>TOTAL</span>
+                        <span>{formatCurrency(cartTotal)}</span>
+                    </div>
+                </div>
+
+                <button
+                    className="pos-checkout-btn"
+                    onClick={() => {
+                        if (discountError) {
+                            showToast('Please correct the discount error', 'error');
+                            return;
+                        }
+                        if (cart.length === 0) {
+                            showToast('Cart is empty', 'error');
+                            return;
+                        }
+                        setCartOpen(false);
+                        setShowCheckout(true);
+                    }}
+                    id={isDesktop ? "checkout-button-desktop" : "checkout-button"}
+                    disabled={!!discountError || cart.length === 0}
+                    style={{ opacity: (discountError || cart.length === 0) ? 0.5 : 1 }}
+                >
+                    Continue to Checkout
+                    <ChevronRight size={20} />
+                </button>
+            </div>
+        );
+    };
+
 
     return (
         <div className="pos-page">
-            {/* Header */}
+            <div className="pos-main-pane">
+                {/* Header */}
             <div className="pos-header">
                 <AppHeader title="Billing">
                     {cart.length > 0 && (
@@ -548,157 +800,16 @@ export default function BillingPage() {
                 <div className="pos-cart-overlay" onClick={() => setCartOpen(false)}>
                     <div className="pos-cart-sheet" ref={cartSheetRef} onClick={(e) => e.stopPropagation()}>
                         <div className="pos-cart-handle" />
-
-                        {/* Cart Header */}
-                        <div className="pos-cart-header">
-                            <div className="pos-cart-title">
-                                <ShoppingBag size={20} />
-                                <span>Current Order</span>
-                                <span className="pos-cart-badge">{cartCount}</span>
-                            </div>
-                            <button className="pos-cart-close" onClick={() => setCartOpen(false)}>
-                                <ChevronDown size={20} />
-                            </button>
-                        </div>
-
-                        {/* Customer Name (optional indicator) */}
-                        {selectedCustomer && (
-                            <div className="pos-cart-customer">
-                                <Users size={14} />
-                                <span>{selectedCustomer.name}</span>
-                            </div>
-                        )}
-
-                        {/* Cart Items */}
-                        <div className="pos-cart-items">
-                            {cart.map(item => (
-                                <div key={item.id} className="pos-cart-item">
-                                    <div className="pos-cart-item-avatar">
-                                        {item.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="pos-cart-item-details">
-                                        <div className="pos-cart-item-name">{item.name}</div>
-                                        <div className="pos-cart-item-price">{formatCurrency(item.selling_price)}</div>
-                                    </div>
-                                    <div className="pos-cart-qty-controls">
-                                        <button className="pos-qty-btn" onClick={() => updateQuantity(item.id, -1)}>
-                                            <Minus size={14} />
-                                        </button>
-                                        <span className="pos-qty-value">
-                                            {item.quantity}
-                                        </span>
-                                        <button className="pos-qty-btn plus" onClick={() => updateQuantity(item.id, 1)}>
-                                            <Plus size={14} />
-                                        </button>
-                                    </div>
-                                    <button className="pos-cart-remove" onClick={() => removeFromCart(item.id)}>
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Discount Section */}
-                        {!showDiscount ? (
-                            <button
-                                className="pos-discount-trigger"
-                                onClick={() => setShowDiscount(true)}
-                            >
-                                <Tag size={16} />
-                                Add Discount
-                            </button>
-                        ) : (
-                            <div className="pos-discount-section">
-                                <div className="pos-discount-header">
-                                    <div className="pos-discount-label">
-                                        <Tag size={14} />
-                                        Discount
-                                    </div>
-                                    <button
-                                        className="pos-discount-close"
-                                        onClick={() => { setShowDiscount(false); setDiscountValue(''); }}
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                </div>
-                                <div className="pos-discount-controls">
-                                    <div className="pos-discount-toggle">
-                                        <button
-                                            className={`pos-discount-type-btn ${discountType === 'flat' ? 'active' : ''}`}
-                                            onClick={() => setDiscountType('flat')}
-                                        >
-                                            {currency}
-                                        </button>
-                                        <button
-                                            className={`pos-discount-type-btn ${discountType === 'percent' ? 'active' : ''}`}
-                                            onClick={() => setDiscountType('percent')}
-                                        >
-                                            <Percent size={14} />
-                                        </button>
-                                    </div>
-                                    <input
-                                        type="number"
-                                        inputMode="decimal"
-                                        placeholder={discountType === 'flat' ? 'Amount' : 'Percentage'}
-                                        value={discountValue}
-                                        onChange={(e) => {
-                                            let val = e.target.value;
-                                            setDiscountValue(val);
-                                        }}
-                                        className="pos-discount-input"
-                                        id="discount-input"
-                                    />
-                                </div>
-                                {discountError && <p style={{ color: 'var(--danger-400)', fontSize: '0.78rem', marginTop: 4, fontWeight: 500 }}>{discountError}</p>}
-                                {discountAmount > 0 && (
-                                    <div className="pos-discount-preview">
-                                        <span>Saving</span>
-                                        <span>-{currency}{discountAmount.toFixed(2)}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Summary */}
-                        <div className="pos-cart-summary">
-                            <div className="pos-summary-row">
-                                <span>Subtotal</span>
-                                <span>{formatCurrency(cartSubtotal)}</span>
-                            </div>
-                            {discountAmount > 0 && (
-                                <div className="pos-summary-row discount">
-                                    <span>Discount</span>
-                                    <span>-{formatCurrency(discountAmount)}</span>
-                                </div>
-                            )}
-                            <div className="pos-summary-divider" />
-                            <div className="pos-summary-row total">
-                                <span>TOTAL</span>
-                                <span>{formatCurrency(cartTotal)}</span>
-                            </div>
-                        </div>
-
-                        {/* Checkout Button */}
-                        <button
-                            className="pos-checkout-btn"
-                            onClick={() => {
-                                if (discountError) {
-                                    showToast('Please correct the discount error', 'error');
-                                    return;
-                                }
-                                setCartOpen(false);
-                                setShowCheckout(true);
-                            }}
-                            id="checkout-button"
-                            disabled={!!discountError}
-                            style={{ opacity: discountError ? 0.5 : 1 }}
-                        >
-                            Continue to Checkout
-                            <ChevronRight size={20} />
-                        </button>
+                        {renderCartContent(false)}
                     </div>
                 </div>
             )}
+            </div>
+
+            {/* Desktop Docked Cart Pane */}
+            <div className="pos-desktop-cart-pane">
+                {renderCartContent(true)}
+            </div>
 
             {/* Checkout Modal */}
             {showCheckout && (
@@ -967,7 +1078,9 @@ export default function BillingPage() {
 
                             <div className="receipt-preview">
                                 {receiptText}
-                                {/* Dynamic UPI QR Code */}
+                            </div>
+
+                            {/* Dynamic UPI QR Code */}
                                 {/* Dynamic UPI QR Code */}
                                 {paymentMethod === 'UPI' && activeSaleRecord && (
                                     <div style={{ margin: '16px 0' }}>
@@ -1022,7 +1135,6 @@ export default function BillingPage() {
                                 >
                                     Done
                                 </button>
-                            </div>
                         </div>
                     </div>
                 )

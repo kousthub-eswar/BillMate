@@ -311,7 +311,8 @@ export default function SalesPage() {
                     <p>{searchQuery ? `No transactions match "${searchQuery}"` : paymentFilter !== 'All' ? `No ${paymentFilter} transactions found for this period.` : 'No transactions found for this period. Sales will appear here after billing.'}</p>
                 </div>
             ) : (
-                sales.map(sale => (
+                <div className="sales-cards-grid">
+                    {sales.map(sale => (
                     <div
                         key={sale.id}
                         className={`sale-card ${sale.refunded ? 'refunded' : ''}`}
@@ -373,7 +374,8 @@ export default function SalesPage() {
                             </div>
                         )}
                     </div>
-                ))
+                ))}
+                </div>
             )}
 
             {totalCount > 25 && (

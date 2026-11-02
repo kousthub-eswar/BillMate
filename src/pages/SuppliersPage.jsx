@@ -311,7 +311,7 @@ export default function SuppliersPage() {
                     )}
                 </div>
             ) : (
-                <div className="customer-list">
+                <div className="customer-list suppliers-cards-grid">
                     {suppliers.map(s => (
                         <div key={s.id} className="customer-item" onClick={() => viewDetail(s)}>
                             <div className="customer-avatar" style={{ background: 'linear-gradient(135deg, var(--info-500), var(--info-400))' }}>

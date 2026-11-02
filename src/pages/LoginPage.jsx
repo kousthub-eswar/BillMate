@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, CheckCircle, RotateCcw, KeyRound, ArrowLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { getOfflineWorkspaceInfo, verifyOfflinePin } from '../database';
+import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, CheckCircle, RotateCcw, KeyRound, ArrowLeft, ShieldCheck, WifiOff } from 'lucide-react';
 import { signIn, signUp, resetPassword } from '../backend/auth';
 import { useToast } from '../components/Toast';
 
@@ -13,7 +14,54 @@ export default function LoginPage({ onLogin }) {
     const [showForgotPassword, setShowForgotPassword] = useState(false);
     const [resetEmailSent, setResetEmailSent] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
+    const [offlineWorkspace, setOfflineWorkspace] = useState(null);
+    const [showOfflineUnlock, setShowOfflineUnlock] = useState(false);
+    const [offlinePin, setOfflinePin] = useState('');
+    const [offlinePinError, setOfflinePinError] = useState('');
+    const [offlinePinLoading, setOfflinePinLoading] = useState(false);
+    const [showOfflinePinText, setShowOfflinePinText] = useState(false);
     const showToast = useToast();
+
+    useEffect(() => {
+        let mounted = true;
+        getOfflineWorkspaceInfo().then(info => {
+            if (mounted && info) {
+                setOfflineWorkspace(info);
+                // If offline or locked with enrolled PIN, suggest offline unlock
+                const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+                if (info.hasPin && (isOffline || info.locked)) {
+                    setShowOfflineUnlock(true);
+                }
+            }
+        });
+        return () => { mounted = false; };
+    }, []);
+
+    const handleUnlockOffline = async (e) => {
+        e.preventDefault();
+        setOfflinePinError('');
+        if (!offlinePin) {
+            setOfflinePinError('Please enter your offline PIN');
+            return;
+        }
+        if (!offlineWorkspace?.userId) {
+            setOfflinePinError('No enrolled offline workspace found.');
+            return;
+        }
+
+        setOfflinePinLoading(true);
+        try {
+            const res = await verifyOfflinePin(offlineWorkspace.userId, offlinePin);
+            if (res.success) {
+                showToast('Offline workspace unlocked! Welcome back.');
+                onLogin();
+            }
+        } catch (err) {
+            setOfflinePinError(err.message || 'Incorrect PIN.');
+        } finally {
+            setOfflinePinLoading(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -343,6 +391,131 @@ export default function LoginPage({ onLogin }) {
         );
     }
 
+    // ── Offline PIN Unlock Screen ──
+    if (showOfflineUnlock && offlineWorkspace?.hasPin) {
+        return (
+            <div className="login-container">
+                <div className="login-card">
+                    <div className="login-logo">
+                        <div style={{
+                            width: 72, height: 72,
+                            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                            borderRadius: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto 16px',
+                            boxShadow: '0 8px 32px rgba(34,197,94,0.25)'
+                        }}>
+                            <ShieldCheck size={36} color="#fff" />
+                        </div>
+                        <h1 className="login-title" style={{ fontSize: '1.4rem' }}>Unlock Workspace</h1>
+                        <p className="login-subtitle" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginTop: 6 }}>
+                            Offline Local Access for:<br />
+                            <strong style={{ color: 'var(--primary-400)', fontSize: '0.9rem' }}>
+                                {offlineWorkspace.email || 'Local Merchant'}
+                            </strong>
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleUnlockOffline} style={{ width: '100%', marginTop: 8 }}>
+                        <div className="form-group">
+                            <label className="form-label">
+                                <Lock size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                                Enter 4–8 Digit PIN
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    className="form-input"
+                                    type={showOfflinePinText ? 'text' : 'password'}
+                                    maxLength={8}
+                                    pattern="[0-9]*"
+                                    inputMode="numeric"
+                                    placeholder="Enter your offline PIN"
+                                    value={offlinePin}
+                                    onChange={(e) => setOfflinePin(e.target.value.replace(/\D/g, ''))}
+                                    autoFocus
+                                    id="offline-unlock-pin"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowOfflinePinText(!showOfflinePinText)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: 12,
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        padding: 4
+                                    }}
+                                >
+                                    {showOfflinePinText ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {offlinePinError && (
+                            <div style={{
+                                color: 'var(--danger-400)',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                fontSize: '0.82rem',
+                                marginBottom: 12,
+                                fontWeight: 500
+                            }} id="offline-pin-error-msg">
+                                {offlinePinError}
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            className="btn btn-primary btn-block"
+                            disabled={offlinePinLoading}
+                            id="unlock-offline-btn"
+                            style={{
+                                marginTop: 8,
+                                padding: '14px',
+                                fontSize: '0.95rem',
+                                fontWeight: 700,
+                                opacity: offlinePinLoading ? 0.6 : 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8
+                            }}
+                        >
+                            {offlinePinLoading ? 'Verifying...' : <><ShieldCheck size={18} /> Unlock Workspace</>}
+                        </button>
+                    </form>
+
+                    <div style={{ marginTop: 20, textAlign: 'center' }}>
+                        <button
+                            onClick={() => setShowOfflineUnlock(false)}
+                            id="switch-to-online-login-btn"
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--primary-400)',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                fontFamily: 'Inter, sans-serif',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6
+                            }}
+                        >
+                            <ArrowLeft size={14} /> Switch to Cloud Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // ── Main Login / Sign Up Form ──
     return (
         <div className="login-container">
@@ -460,7 +633,31 @@ export default function LoginPage({ onLogin }) {
                     </button>
                 </form>
 
-                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                <div style={{ marginTop: 20, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {offlineWorkspace?.hasPin && !isSignUp && (
+                        <button
+                            type="button"
+                            onClick={() => { setOfflinePinError(''); setShowOfflineUnlock(true); }}
+                            id="goto-offline-unlock-btn"
+                            style={{
+                                background: 'rgba(34, 197, 94, 0.1)',
+                                border: '1px solid rgba(34, 197, 94, 0.25)',
+                                color: 'var(--accent-400)',
+                                padding: '10px 16px',
+                                borderRadius: 10,
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                fontFamily: 'Inter, sans-serif',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8
+                            }}
+                        >
+                            <ShieldCheck size={16} /> Unlock with Offline PIN
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsSignUp(!isSignUp)}
                         style={{

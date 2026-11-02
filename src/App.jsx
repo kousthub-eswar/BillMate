@@ -4,12 +4,13 @@ import {
   Clock, Settings, Wallet, Users, Truck, ClipboardList,
   Lock, Eye, EyeOff, KeyRound, CheckCircle, MoreHorizontal, BarChart3, X
 } from 'lucide-react';
-import { initializeSettings } from './database';
+import { initializeSettings, startSyncEngine, lockWorkspace, isWorkspaceUnlockedOffline } from './database';
 import { isAuthenticated, getSession, signOut, onAuthStateChange, updatePassword } from './backend/auth';
 import { ToastProvider, useToast } from './components/Toast';
 import OnboardingWizard from './components/OnboardingWizard';
 import SplashScreen from './components/SplashScreen';
 import ErrorBoundary from './components/ErrorBoundary';
+import DesktopSidebar from './components/DesktopSidebar';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -234,21 +235,41 @@ function ResetPasswordPage({ onComplete }) {
 }
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
+  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated() || isWorkspaceUnlockedOffline());
   const [activePage, setActivePage] = useState('billing');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024 && window.innerWidth >= 768;
+    }
+    return false;
+  });
 
   // Listen for Supabase auth state changes
   useEffect(() => {
     const savedTheme = localStorage.getItem('billmate_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
 
+    // Start background offline sync engine
+    startSyncEngine();
+
     // Validate session on mount
     getSession().then(session => {
       if (session) {
+        setLoggedIn(true);
+        initializeSettings();
+      } else if (isAuthenticated() || isWorkspaceUnlockedOffline()) {
+        // Offline session fallback
+        setLoggedIn(true);
+        initializeSettings();
+      } else {
+        setLoggedIn(false);
+      }
+    }).catch(() => {
+      if (isAuthenticated() || isWorkspaceUnlockedOffline()) {
         setLoggedIn(true);
         initializeSettings();
       } else {
@@ -281,7 +302,12 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    lockWorkspace();
+    try {
+      await signOut();
+    } catch {
+      // Offline signout
+    }
     setLoggedIn(false);
     setActivePage('billing');
   };
@@ -404,10 +430,22 @@ function App() {
   return (
     <ToastProvider>
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
-      <div className="app-container">
+      <div className={`app-container ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        <DesktopSidebar
+          activePage={activePage}
+          onNavigate={(page) => {
+            setActivePage(page);
+            setShowMoreMenu(false);
+          }}
+          onLogout={handleLogout}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+        <main className="app-main-content">
         <Suspense fallback={<PageLoader />}>
           {renderPage()}
         </Suspense>
+        </main>
 
         <nav className="bottom-nav">
           {bottomNavItems.map(({ key, label, icon: Icon, isBilling, isMore }) => {
