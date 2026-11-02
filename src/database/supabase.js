@@ -1,17 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const getEnvVar = (name) => {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[name]) {
-        return import.meta.env[name];
-    }
-    if (typeof process !== 'undefined' && process.env && process.env[name]) {
-        return process.env[name];
-    }
-    return undefined;
-};
+// Note: Vite requires static property access (import.meta.env.VITE_*) for build-time string substitution
+const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL)
+    || (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_URL);
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY)
+    || (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_ANON_KEY);
 
 if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Missing Supabase configuration: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be defined.');
